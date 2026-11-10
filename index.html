@@ -188,8 +188,20 @@ details.more summary{cursor:pointer;font-weight:700;min-height:32px;display:flex
     </div>
     <div class="field"><label for="f_head">Noteheads</label>
       <select id="f_head" data-k="head"><option value="normal">Regular</option><option value="x">× (unpitched sound)</option></select></div>
+    <div class="two">
+      <div class="field"><label for="f_iconColor">Icon colors</label>
+        <select id="f_iconColor" data-k="iconColor"><option value="length">By length (rhythm colors)</option><option value="pitch">By pitch (Chroma-Notes)</option><option value="none">No colors</option></select></div>
+      <div class="field"><label for="f_perLine">Measures on each line</label>
+        <select id="f_perLine" data-k="perLine"><option value="auto">Automatic</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="6">6</option><option value="8">8</option></select></div>
+    </div>
+    <div class="key" aria-hidden="true"><span><i style="background:#E42B2B"></i>C</span><span><i style="background:#F58A1F"></i>D</span><span><i style="background:#F7DE22"></i>E</span><span><i style="background:#93C83E"></i>F</span><span><i style="background:#13A39A"></i>G</span><span><i style="background:#5D58B8"></i>A</span><span><i style="background:#D94796"></i>B</span></div>
+    <div class="field"><label for="f_pitchSteps">Icon heights</label>
+      <select id="f_pitchSteps" data-k="pitchSteps"><option value="half">By half step (Rhythm Icon Template)</option><option value="letter">By letter, like lines and spaces (more compact)</option></select></div>
+    <div class="field"><label for="f_measureLabels">Words over the measures</label><input type="text" id="f_measureLabels" data-k="measureLabels" placeholder="G chord, , F chord, , C chord">
+      <p class="help">One for each measure, separated by commas, such as chord names. Leave a spot empty to skip a measure.</p></div>
     <div class="checks">
-      <label><input type="checkbox" data-k="colors"> Color icons by length</label>
+      <label><input type="checkbox" data-k="iconLetters" data-off="1"> Letter names on the pitched icons</label>
+      <label><input type="checkbox" data-k="noteColors" data-off="1"> Color the noteheads by pitch (Chroma-Notes)</label>
       <label><input type="checkbox" data-k="micro"> Show microbeats over the beats</label>
       <label><input type="checkbox" data-k="repeat"> Repeat sign at the end</label>
       <label><input type="checkbox" data-k="labels"> Row labels (Icons, Beats, Counts, Notes)</label>
@@ -349,7 +361,6 @@ function buildModel(page){
     evs.push({ t: R.total, len: total - R.total, rest: true, pad: true });
     warnings.push("The last measure was short, so the rest of it is shown as rest.");
   }
-  if (total / meter.measure > 4 && meter.measure >= 8) warnings.push("More than four measures makes the notation small. Two measures fit best.");
   for (let i = 0; i < evs.length; i++){
     if (evs[i].rest) continue;
     let j = i + 1;
@@ -403,66 +414,147 @@ function splitPiece(start, len, meter, isRest){
 }
 
 // ---- the notation block: icons, beat bars, count boxes, staff ----
+// Chroma-Notes colors (the Boomwhackers color wheel), by pitch class from C
+const CHROMA = ["#E42B2B", "#F2542A", "#F58A1F", "#F8B21C", "#F7DE22", "#93C83E", "#2EA84A", "#13A39A", "#2C6EB5", "#5D58B8", "#9B5BB5", "#D94796"];
+function chromaOf(note){ return CHROMA[((note.midi % 12) + 12) % 12]; }
+function inkOn(hex){
+  const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? "#000000" : "#FFFFFF";
+}
+function iconMode(page){ return page.iconColor || (page.colors === false ? "none" : "length"); }
+function noteName(n){ return n.L + (n.acc > 0 ? "♯" : n.acc < 0 ? "♭" : ""); }
+
+function lineSlices(page, model){
+  let per = parseInt(page.perLine, 10);
+  if (!(per > 0)) per = Math.max(1, Math.floor(32 / model.meter.measure + EPS));
+  per = Math.min(per, model.measures);
+  const lines = [];
+  for (let m = 0; m < model.measures; m += per) lines.push([m, Math.min(model.measures, m + per)]);
+  return { per, lines };
+}
+// The part of the music that falls on one line, with times measured from the line's start.
+function sliceModel(model, m0, m1){
+  const a = m0 * model.meter.measure, b = m1 * model.meter.measure, evs = [];
+  model.evs.forEach(e => {
+    const end = e.t + e.len;
+    if (!e.rest && e.ring && end <= a + EPS && e.next > a + EPS){
+      evs.push({ t: 0, len: 0, rest: false, ringOnly: true, ring: true, notes: e.notes, colorLen: e.len, next: Math.min(e.next, b) - a });
+      return;
+    }
+    if (end <= a + EPS || e.t >= b - EPS) return;
+    const s = Math.max(e.t, a), f = Math.min(end, b);
+    const ne = Object.assign({}, e, { t: s - a, len: f - s, cont: e.t < a - EPS, tieOut: end > b + EPS, colorLen: e.len });
+    if (!e.rest) ne.next = Math.min(e.next, b) - a;
+    evs.push(ne);
+  });
+  evs.sort((x, y) => x.t - y.t || (x.ringOnly ? -1 : 1));
+  return { meter: model.meter, evs, total: b - a, measures: m1 - m0, mStart: m0 };
+}
+
 function renderBlock(page, model){
-  const meter = model.meter, total = model.total;
+  const meter = model.meter;
   const fiveLine = page.staff === "treble" || page.staff === "bass";
   const hasClef = fiveLine;
-  // spacing: fit the measures across the block, with a staff size that suits the spacing
-  let ss = 11, X0 = 0, S = 0;
+  const { per, lines } = lineSlices(page, model);
+  const lineShorts = per * meter.measure;
+  // spacing: fit one line's measures across the block; the staff is as large as the quickest note allows
+  const quickest = Math.min(2, ...model.evs.map(e => e.len));
+  const ssCap = lines.length > 1 ? 8.5 : 11;
+  let ss = ssCap, X0 = 0, S = 0;
   for (let k = 0; k < 3; k++){
     const prefix = ss * ((hasClef ? 3.6 : 0.8) + 4.0 + 1.6);
     X0 = STAFF_X + prefix;
-    S = (BLOCK_W - X0 - ss * 3.0) / total;
-    ss = clamp(S / 4.4, 6.5, 11);
+    S = (BLOCK_W - X0 - ss * 3.0) / lineShorts;
+    ss = clamp(S * quickest / 4.4, 6.5, ssCap);
   }
   const Q = 0.75 * S, gap = S - Q;
   const slot = t => X0 + t * S;
   const headCx = t => slot(t) + Q / 2;
-  const parts = [];
-
-  // --- icons ---
+  // icon heights are shared by every line so the same pitch sits at the same height
+  const byLetter = page.pitchSteps === "letter";
+  const hval = n => byLetter ? n.dia : n.midi;
   const allMidi = [];
-  model.evs.forEach(e => { if (!e.rest && e.notes) e.notes.forEach(n => allMidi.push(n.midi)); });
+  model.evs.forEach(e => { if (!e.rest && e.notes) e.notes.forEach(n => allMidi.push(hval(n))); });
   const maxM = allMidi.length ? Math.max(...allMidi) : 0, minM = allMidi.length ? Math.min(...allMidi) : 0;
   const span = maxM - minM;
-  const H = span ? Math.min(Q / 2, (200 - Q) / span) : 0;
-  const yI = 8, iconsH = Q + span * H;
-  const yOfMidi = m => yI + (maxM - m) * H;
-  const colorOf = len => page.colors === false ? PLAIN_ICON : (DUR_COLORS[len] || PLAIN_ICON);
+  const H = span ? Math.min(byLetter ? Q * 0.6 : Q / 2, (200 - Q) / span) : 0;
+  const labelsByMeasure = String(page.measureLabels || "").split(",").map(x => x.trim());
+  const hasMeasureLabels = labelsByMeasure.some(Boolean);
+  const mode = iconMode(page);
+  const G = { ss, S, Q, gap, slot, headCx, fiveLine, hasClef, maxM, H, span, mode, hasMeasureLabels, labelsByMeasure, hval };
+  const parts = [];
+  let y = 8;
+  lines.forEach(([m0, m1], li) => {
+    const lm = sliceModel(model, m0, m1);
+    y = renderLine(page, lm, G, y, { first: li === 0, last: li === lines.length - 1, parts });
+    y += 14;
+  });
+  const height = Math.ceil(y - 14 + 4);
+  const svg = `<svg class="notation" xmlns="http://www.w3.org/2000/svg" width="${BLOCK_W}" height="${height}" viewBox="0 0 ${BLOCK_W} ${height}" role="img" aria-label="${esc(describeBlock(page, model))}">${parts.join("")}</svg>`;
+  return { svg, height };
+}
+
+function renderLine(page, model, G, yTop, o){
+  const { S, Q, gap, slot, ss, maxM, H, span, mode, hval } = G;
+  const meter = model.meter, total = model.total, parts = o.parts;
+  const showLabels = page.labels !== false && o.first;
+  let y = yTop;
+  // --- words over measures (such as chord names) ---
+  if (G.hasMeasureLabels){
+    for (let m = 0; m < model.measures; m++){
+      const txt = G.labelsByMeasure[model.mStart + m];
+      if (txt) parts.push(`<text x="${r2(slot(m * meter.measure))}" y="${r2(y + 14)}" font-family="Atkinson Hyperlegible, Arial, sans-serif" font-weight="700" font-size="17" fill="#000000">${esc(txt)}</text>`);
+    }
+    y += 21;
+  }
+  // --- icons ---
+  const yI = y, iconsH = Q + span * H;
+  const yOfNote = n => yI + (maxM - hval(n)) * H;
+  const lenColor = len => mode === "none" ? PLAIN_ICON : (DUR_COLORS[len] || PLAIN_ICON);
+  const colorFor = (e, note) => (mode === "pitch" && note) ? chromaOf(note) : lenColor(e.colorLen || e.len);
+  const outline = mode === "pitch" ? ` stroke="rgba(0,0,0,0.35)" stroke-width="1"` : "";
   const ringZones = [];
-  let lastY = null;
   model.evs.forEach(e => {
-    if (!e.rest){
-      const ys = e.notes ? e.notes.map(n => yOfMidi(n.midi)) : [yI];
-      ys.forEach(y => parts.push(rect(slot(e.t), y, e.len * S - gap, Q, colorOf(e.len))));
-      lastY = Math.max(...ys);
-      if (e.ring && e.next > e.t + e.len + EPS){
-        const x1 = slot(e.t) + e.len * S - gap, x2 = slot(e.next) - gap;
-        ys.forEach(y => parts.push(rect(x1, y, x2 - x1, Q, tint(colorOf(e.len), 0.78))));
-        ringZones.push([e.t + e.len, e.next]);
-      }
+    if (e.rest) return;
+    const notes = e.notes || [null];
+    const ys = notes.map(n => n ? yOfNote(n) : yI);
+    if (!e.ringOnly){
+      notes.forEach((n, i) => {
+        const w = e.len * S - gap, c = colorFor(e, n);
+        parts.push(rect(slot(e.t), ys[i], w, Q, c, outline));
+        if (page.iconLetters && n && w >= 12 && Q >= 10){
+          const fs = Math.min(16, Q * 0.72);
+          parts.push(`<text x="${r2(slot(e.t) + Math.min(6, w * 0.2))}" y="${r2(ys[i] + Q / 2 + fs * 0.36)}" font-family="Atkinson Hyperlegible, Arial, sans-serif" font-weight="700" font-size="${r2(fs)}" fill="${inkOn(c)}">${esc(noteName(n))}</text>`);
+        }
+      });
+    }
+    const ringFrom = e.ringOnly ? 0 : e.t + e.len;
+    if (e.ring && e.next > ringFrom + EPS){
+      const x1 = e.ringOnly ? slot(0) : slot(e.t) + e.len * S - gap, x2 = slot(e.next) - gap;
+      notes.forEach((n, i) => parts.push(rect(x1, ys[i], x2 - x1, Q, tint(colorFor(e, n), 0.72))));
+      ringZones.push([ringFrom, e.next]);
     }
   });
   // rests: one outlined box per beat, at the height of the sound before them
-  lastY = null;
+  let lastY = null;
   model.evs.forEach((e, i) => {
-    if (!e.rest){ lastY = e.notes ? yOfMidi(e.notes[0].midi) : yI; return; }
-    let y = lastY;
-    if (y === null){ const nx = model.evs.slice(i).find(x => !x.rest); y = nx && nx.notes ? yOfMidi(nx.notes[0].midi) : yI; }
+    if (!e.rest){ lastY = e.notes ? yOfNote(e.notes[0]) : yI; return; }
+    let yy = lastY;
+    if (yy === null){ const nx = model.evs.slice(i).find(x => !x.rest); yy = nx && nx.notes ? yOfNote(nx.notes[0]) : yI; }
     let s = e.t;
     const end = e.t + e.len;
     while (s < end - EPS){
       const nb = Math.min(end, (Math.floor(s / meter.beat + EPS) + 1) * meter.beat);
       const ringing = ringZones.some(z => s >= z[0] - EPS && nb <= z[1] + EPS);
-      if (!ringing) parts.push(rect(slot(s) + 0.75, y + 0.75, (nb - s) * S - gap - 1.5, Q - 1.5, "#FFFFFF", ` stroke="#8C8C8C" stroke-width="1.5"`));
+      if (!ringing) parts.push(rect(slot(s) + 0.75, yy + 0.75, (nb - s) * S - gap - 1.5, Q - 1.5, "#FFFFFF", ` stroke="#8C8C8C" stroke-width="1.5"`));
       s = nb;
     }
   });
-  if (page.labels !== false) parts.push(label("Icons", yI + iconsH / 2));
+  if (showLabels) parts.push(label("Icons", yI + iconsH / 2));
 
   // --- beat bars ---
   const g1 = Q / 3, bh = Q * 0.375;
-  let y = yI + iconsH + g1;
+  y = yI + iconsH + g1;
   const yBarsTop = y;
   if (page.micro !== false){
     for (let t = 0; t < total - EPS; t += meter.micro){
@@ -473,17 +565,16 @@ function renderBlock(page, model){
   }
   for (let t = 0; t < total - EPS; t += meter.beat) parts.push(rect(slot(t), y, meter.beat * S - gap, bh, BAR_DARK));
   const yBarsBottom = y + bh;
-  if (page.labels !== false) parts.push(label("Beats", (yBarsTop + yBarsBottom) / 2));
+  if (showLabels) parts.push(label("Beats", (yBarsTop + yBarsBottom) / 2));
   for (let m = 1; m < model.measures; m++){
     const x = slot(m * meter.measure) - gap / 2;
     parts.push(rect(x - 1, yI - 4, 2, yBarsBottom - yI + 8, "#000000"));
   }
 
-  // --- count boxes ---
-  y = yBarsBottom + 14;
+  // --- a place to write each count ---
+  y = yBarsBottom + (page.counts !== false ? 14 : 6);
   if (page.counts !== false){
     const hC = 42;
-    // a place to write each count: a dashed box like the meter signature box, or a line
     const countSpace = (x, y0, w, h, ring) => {
       if (page.countStyle === "lines"){
         const ly = r2(y0 + h - 2);
@@ -495,29 +586,29 @@ function renderBlock(page, model){
         ? rect(x, y0, w, h, "#E9F2EC", ` rx="6" stroke="#7FA38D" stroke-width="2" stroke-dasharray="6 4"`)
         : rect(x, y0, w, h, "#FFFFFF", ` rx="6" stroke="${ACCENT}" stroke-width="2.2" stroke-dasharray="7 5"`);
     };
-    const soundStarts = model.evs.filter(e => !e.rest).map(e => e.t).concat([total]);
+    const soundStarts = model.evs.filter(e => !e.rest && !e.ringOnly).map(e => e.t).concat([total]);
     model.evs.forEach(e => {
       if (e.rest) return;
-      const nextStart = soundStarts.find(t => t > e.t + EPS);
-      const bw = Math.min(Q + 4, (nextStart - e.t) * S - 4);
-      parts.push(countSpace(slot(e.t) - 2, y, bw, hC, false));
+      if (!e.ringOnly && !e.cont){
+        const nextStart = soundStarts.find(t => t > e.t + EPS);
+        const bw = Math.min(Q + 4, (nextStart - e.t) * S - 4);
+        parts.push(countSpace(slot(e.t) - 2, y, bw, hC, false));
+      }
       if (e.ring){
-        for (let b = Math.ceil((e.t + EPS) / meter.beat) * meter.beat; b < e.next - EPS; b += meter.beat)
-          parts.push(countSpace(slot(b) - 2, y, Q + 4, hC, true));
+        const from = e.ringOnly ? 0 : Math.ceil((e.t + EPS) / meter.beat) * meter.beat;
+        for (let bt = from; bt < e.next - EPS; bt += meter.beat) parts.push(countSpace(slot(bt) - 2, y, Q + 4, hC, true));
       }
     });
-    if (page.labels !== false) parts.push(label("Counts", page.countStyle === "lines" ? y + hC - 10 : y + hC / 2));
+    if (showLabels) parts.push(label("Counts", page.countStyle === "lines" ? y + hC - 10 : y + hC / 2));
     y += hC + 12;
   }
 
   // --- staff notation ---
-  const st = engraveStaff(page, model, { ss, S, Q, gap, slot, headCx, fiveLine, hasClef });
+  const st = engraveStaff(page, model, Object.assign({}, G, { first: o.first, last: o.last }));
   const yMid = y + (-st.minY + 0.3) * ss;
   parts.push(st.draw(yMid));
-  if (page.labels !== false) parts.push(label("Notes", yMid));
-  const height = Math.ceil(yMid + (st.maxY + 0.3) * ss + 4);
-  const svg = `<svg class="notation" xmlns="http://www.w3.org/2000/svg" width="${BLOCK_W}" height="${height}" viewBox="0 0 ${BLOCK_W} ${height}" role="img" aria-label="${esc(describeBlock(page, model))}">${parts.join("")}</svg>`;
-  return { svg, height };
+  if (showLabels) parts.push(label("Notes", yMid));
+  return yMid + (st.maxY + 0.3) * ss;
 }
 
 function describeBlock(page, model){
@@ -538,7 +629,7 @@ function engraveStaff(page, model, L){
   const posOf = n => (fiveLine && n) ? 2 - (n.dia - ref) * 0.5 : 0;
   const cross = page.head === "x";
   const STEM_W = 0.1158;
-  const endX = slot(model.total) - gap / 2 + 1.4 * ss;
+  const endX = L.last === false ? slot(model.total) - gap / 2 + 0.08 * ss : slot(model.total) - gap / 2 + 1.4 * ss;
 
   // staff lines
   const lines = fiveLine ? [-2, -1, 0, 1, 2] : [0];
@@ -552,7 +643,10 @@ function engraveStaff(page, model, L){
   }
   // meter signature: a dashed box for students, or the numbers
   const boxX = x;
-  if (page.writeMeter !== false){
+  if (L.first === false){
+    const mnum = String(model.mStart + 1);
+    add(lineTop - 2.6, lineTop - 1, ym => `<text x="${r2(STAFF_X)}" y="${r2(Y(ym, lineTop - 1.2))}" font-family="Atkinson Hyperlegible, Arial, sans-serif" font-weight="700" font-size="${r2(Math.max(13, 1.5 * ss))}" fill="#000000">${mnum}</text>`);
+  } else if (page.writeMeter !== false){
     add(-2.7, 2.7, ym => rect(boxX, Y(ym, -2.7), 3.8 * ss, 5.4 * ss, "#FFFFFF", ` rx="${r2(0.6 * ss)}" stroke="${ACCENT}" stroke-width="2.2" stroke-dasharray="7 5"`));
   } else {
     const num = String(meter.num), den = String(meter.den);
@@ -568,6 +662,7 @@ function engraveStaff(page, model, L){
   // pieces: split each event at bar lines and into notatable values
   const pieces = [];
   model.evs.forEach(e => {
+    if (e.ringOnly) return;
     let s = e.t;
     const end = e.t + e.len, segs = [];
     while (s < end - EPS){
@@ -588,7 +683,8 @@ function engraveStaff(page, model, L){
   sounding.forEach((p, i) => {
     const nx = sounding[i + 1];
     p.tieNext = nx && nx.ev === p.ev ? nx : null;
-    p.lv = p.ev.ring && !(nx && nx.ev === p.ev);
+    p.tieOut = !p.tieNext && !!p.ev.tieOut;
+    p.lv = p.ev.ring && !p.tieNext && !p.ev.tieOut;
   });
 
   // beam groups
@@ -656,7 +752,13 @@ function engraveStaff(page, model, L){
     }
     // heads, accidentals, dots
     p.ys.forEach((yr, i) => {
-      add(yr - 0.6, yr + 0.6, ym => glyph(p.head, p.hx, Y(ym, yr), ss));
+      const n = p.ev.notes ? p.ev.notes[i] : null;
+      if (page.noteColors && n && !cross){
+        const c = chromaOf(n), hollow = p.v >= 4;
+        add(yr - 0.6, yr + 0.6, ym => hollow
+          ? `<ellipse cx="${r2(p.hx + p.hw / 2)}" cy="${r2(Y(ym, yr))}" rx="${r2(p.hw * 0.4)}" ry="${r2(0.4 * ss)}" fill="${c}"/>` + glyph(p.head, p.hx, Y(ym, yr), ss)
+          : glyph(p.head, p.hx, Y(ym, yr), ss).replace("<path ", `<path fill="${c}" stroke="#000000" stroke-width="22" `));
+      } else add(yr - 0.6, yr + 0.6, ym => glyph(p.head, p.hx, Y(ym, yr), ss));
       const a = p.accs[i];
       if (a && fiveLine){
         const an = a > 0 ? "accidentals.sharp" : "accidentals.flat", b = GLYPHS[an][1];
@@ -718,6 +820,9 @@ function engraveStaff(page, model, L){
     if (p.tieNext){
       const q = p.tieNext;
       p.ys.forEach((yr, i) => add(yr - 1.2, yr + 1.2, ym => tiePath(p.hx + p.hw + 0.12 * ss, q.hx - 0.12 * ss, yr, dirs[i], ym)));
+    } else if (p.tieOut){
+      const xb = endX - 0.3 * ss;
+      p.ys.forEach((yr, i) => add(yr - 1.2, yr + 1.2, ym => tiePath(p.hx + p.hw + 0.12 * ss, xb, yr, dirs[i], ym)));
     } else if (p.lv){
       const nextHead = headCx(p.ev.next) - 1.2 * ss;
       const xb = Math.min(p.hx + p.hw + 5.6 * ss, nextHead);
@@ -742,6 +847,7 @@ function engraveStaff(page, model, L){
     add(barTop, barBot, ym => rect(bx - 0.08 * ss, Y(ym, barTop), 0.16 * ss, (barBot - barTop) * ss, "#000000"));
   }
   add(barTop, barBot, ym => {
+    if (L.last === false) return rect(endX - 0.16 * ss, Y(ym, barTop), 0.16 * ss, (barBot - barTop) * ss, "#000000");
     let s = rect(endX - 0.5 * ss, Y(ym, barTop), 0.5 * ss, (barBot - barTop) * ss, "#000000");
     s += rect(endX - 1.0 * ss, Y(ym, barTop), 0.16 * ss, (barBot - barTop) * ss, "#000000");
     if (page.repeat !== false) [-0.5, 0.5].forEach(d => { s += glyph("dots.dot", endX - 1.7 * ss, Y(ym, d), ss); });
@@ -842,13 +948,7 @@ ${partHtml}
 
 // ===================== RED BIRD EXAMPLE PAGES =====================
 const DRY = "Dry-erase page. Write with a marker, then wipe it clean for the next player.";
-const CHIME_QS = [
-  { text: "My chime letter:", blank: "inline", choices: "G B D, F A C, C E G", choicesLead: "It rings in (circle all):", style: "circle" },
-  { text: "How many beats does your chime ring?", choices: "2, 4, 8", style: "circle" },
-  { text: "The curved line after the whole note means:", choices: "let it ring, play it again, stop the sound", style: "circle" },
-  { text: "A new chord starts every:", choices: "1 measure, 2 measures", style: "circle" }
-];
-const BASE = { meter: "4/4", colors: true, micro: true, meterQs: true, writeMeter: true, repeat: true, counts: true, countStyle: "dashed", labels: true, countText: "", partHeading: "Your part", head: "normal", lead: "", map: { show: false, title: "Pitch map", note: "", labels: "", pitches: "", rhythm: "2", after: 2 } };
+const BASE = { meter: "4/4", colors: true, iconColor: "length", iconLetters: false, noteColors: false, perLine: "auto", measureLabels: "", pitchSteps: "half", micro: true, meterQs: true, writeMeter: true, repeat: true, counts: true, countStyle: "dashed", labels: true, countText: "", partHeading: "Your part", head: "normal", lead: "", map: { show: false, title: "Pitch map", note: "", labels: "", pitches: "", rhythm: "2", after: 2 } };
 function preset(o){ return JSON.parse(JSON.stringify(Object.assign({}, BASE, o))); }
 const RED_BIRD = [
   preset({ name: "Red Bird: drums", title: "Drums", subtitle: DRY, staff: "one", rhythm: "1 1 1 1 2 R2 | R8", pitches: "",
@@ -880,9 +980,15 @@ const RED_BIRD = [
       { text: "From C back to G, your note moves:", choices: "up, down, stays the same", style: "circle" }
     ],
     map: { show: true, title: "Root map", note: "(measure 1 of each chord)", labels: "G, F, C, G", pitches: "G3 F3 C3 G3", rhythm: "1 1 1 1 2", after: 2 } }),
-  preset({ name: "Red Bird: hand chimes, G chord", title: "Hand chimes", lead: "G chord", subtitle: ", measures 1–2 and 7–8. Wipe clean after.", staff: "treble", rhythm: "8~ | R8", pitches: "G4+B4+D5", questions: CHIME_QS }),
-  preset({ name: "Red Bird: hand chimes, F chord", title: "Hand chimes", lead: "F chord", subtitle: ", measures 3–4. Wipe clean after.", staff: "treble", rhythm: "8~ | R8", pitches: "F4+A4+C5", questions: CHIME_QS }),
-  preset({ name: "Red Bird: hand chimes, C chord", title: "Hand chimes", lead: "C chord", subtitle: ", measures 5–6. Wipe clean after.", staff: "treble", rhythm: "8~ | R8", pitches: "C4+E4+G4", questions: CHIME_QS })
+  preset({ name: "Red Bird: hand chimes, whole progression", title: "Hand chimes", lead: "Whole progression", subtitle: ", measures 1–8.", staff: "treble",
+    rhythm: "8~ | R8 | 8~ | R8 | 8~ | R8 | 8~ | R8", pitches: "G4+B4+D5 F4+A4+C5 C4+E4+G4 G4+B4+D5",
+    measureLabels: "G chord, , F chord, , C chord, , G chord, ", iconColor: "pitch", iconLetters: true, noteColors: true, pitchSteps: "letter", micro: false, counts: false,
+    questions: [
+      { text: "My chime letter:", blank: "inline", choices: "G chord, F chord, C chord", choicesLead: "It rings in (circle all):", style: "circle" },
+      { text: "How many measures does your chime ring in all?", blank: "below", after: "measures" },
+      { text: "The curved line after each whole note means:", choices: "let it ring, play it again, stop the sound", style: "circle" },
+      { text: "A new chord starts every:", choices: "1 measure, 2 measures", style: "circle" }
+    ] })
 ];
 
 // ===================== APP: editing, saving, printing =====================
@@ -898,10 +1004,15 @@ function normalize(p){
   const out = Object.assign(base, p || {});
   out.map = Object.assign({}, BASE.map, (p && p.map) || {});
   out.questions = Array.isArray(out.questions) ? out.questions.map(q => Object.assign({}, BLANK_Q, q)) : [];
-  ["name", "title", "lead", "subtitle", "rhythm", "pitches", "meter", "countText", "partHeading"].forEach(k => { out[k] = out[k] == null ? "" : String(out[k]); });
+  ["name", "title", "lead", "subtitle", "rhythm", "pitches", "meter", "countText", "partHeading", "measureLabels"].forEach(k => { out[k] = out[k] == null ? "" : String(out[k]); });
   if (!["one", "treble", "bass"].includes(out.staff)) out.staff = "one";
   if (!["normal", "x"].includes(out.head)) out.head = "normal";
   if (!["dashed", "lines"].includes(out.countStyle)) out.countStyle = "dashed";
+  if (!["length", "pitch", "none"].includes(p && p.iconColor)) out.iconColor = (p && p.colors === false) ? "none" : "length";
+  if (!["auto", "1", "2", "3", "4", "6", "8"].includes(String(out.perLine))) out.perLine = "auto";
+  out.perLine = String(out.perLine);
+  if (!["half", "letter"].includes(out.pitchSteps)) out.pitchSteps = "half";
+  out.measureLabels = out.measureLabels == null ? "" : String(out.measureLabels);
   out.id = out.id || newId();
   return out;
 }
@@ -968,7 +1079,7 @@ function fillForm(){
   const p = cur();
   document.querySelectorAll("[data-k]").forEach(el => {
     const k = el.dataset.k;
-    if (el.type === "checkbox") el.checked = p[k] !== false;
+    if (el.type === "checkbox") el.checked = el.dataset.off === "1" ? !!p[k] : p[k] !== false;
     else el.value = p[k] == null ? "" : p[k];
   });
   document.querySelectorAll("[data-mk]").forEach(el => {
@@ -1183,7 +1294,7 @@ $("examplesBtn").addEventListener("click", () => {
   state.pages.push(...added);
   state.current = added[0].id;
   persist(); renderAll();
-  status("Added the seven Red Bird pages to the end of the list.");
+  status(`Added the ${RED_BIRD.length} Red Bird pages to the end of the list.`);
 });
 
 renderAll();
