@@ -1,0 +1,1178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dry-erase page maker</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='8' y='14' width='84' height='72' rx='8' fill='%23ffffff' stroke='%231E5B3F' stroke-width='6'/%3E%3Crect x='20' y='30' width='16' height='16' fill='%23ECB100'/%3E%3Crect x='42' y='30' width='38' height='16' fill='%23D6253C'/%3E%3Crect x='20' y='60' width='60' height='5' fill='%231E5B3F'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&amp;family=Bricolage+Grotesque:opsz,wght@12..96,800&amp;display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme: light;
+  --ground:#E7ECE9; --panel:#FFFFFF; --ink:#18201C; --muted:#4E5A54; --rule:#C9D2CD; --field:#FFFFFF;
+  --accent:#1E5B3F; --accent-ink:#FFFFFF; --soft:#EEF4F0; --warn-bg:#FFF4D6; --warn-ink:#5C4300; --danger:#A3262A;
+  --focus:#1D6FD1;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --ground:#151A17; --panel:#1F2622; --ink:#E8EEEA; --muted:#A9B5AE; --rule:#3A4540; --field:#151A17;
+    --accent:#6FC29A; --accent-ink:#0E1A14; --soft:#25302A; --warn-bg:#3A3018; --warn-ink:#F3DE9E; --danger:#F08A8C; --focus:#7FB2F0;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --ground:#151A17; --panel:#1F2622; --ink:#E8EEEA; --muted:#A9B5AE; --rule:#3A4540; --field:#151A17;
+  --accent:#6FC29A; --accent-ink:#0E1A14; --soft:#25302A; --warn-bg:#3A3018; --warn-ink:#F3DE9E; --danger:#F08A8C; --focus:#7FB2F0;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:"Atkinson Hyperlegible","Helvetica Neue",Arial,sans-serif;font-size:16px;line-height:1.45;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+
+/* ---- top bar ---- */
+.bar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 24px;background:var(--panel);border-bottom:1px solid var(--rule)}
+.bar h1{margin:0;font-family:"Bricolage Grotesque","Arial Black",sans-serif;font-weight:800;font-size:26px;line-height:1.1;letter-spacing:-0.01em;color:var(--accent)}
+.bar .spacer{flex:1}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:40px;padding:0 16px;border-radius:8px;border:1.5px solid var(--rule);background:var(--panel);cursor:pointer;font-weight:700;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.small{min-height:34px;padding:0 12px;font-size:14px}
+.btn.danger{color:var(--danger)}
+.btn:disabled{opacity:.5;cursor:default}
+
+/* ---- layout ---- */
+.app{display:grid;grid-template-columns:minmax(330px,420px) 1fr;min-height:calc(100% - 70px)}
+.panel{background:var(--panel);border-right:1px solid var(--rule);padding:18px 20px 40px;overflow:auto;max-height:calc(100vh - 70px)}
+.stage{padding:24px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.fit{width:100%;position:relative}
+.paper{width:1056px;height:816px;transform-origin:0 0;box-shadow:0 1px 2px rgba(0,0,0,.18),0 10px 30px rgba(0,0,0,.12);background:#fff}
+@media (max-width: 860px){
+  .app{grid-template-columns:1fr}
+  .panel{max-height:none;border-right:0;border-bottom:1px solid var(--rule)}
+  .stage{padding:14px}
+}
+
+/* ---- panel content ---- */
+.panel h2{font-size:15px;margin:22px 0 8px;color:var(--muted);font-weight:700;letter-spacing:.01em}
+.panel h2:first-child{margin-top:0}
+.pages{list-style:none;margin:0;padding:0;border:1px solid var(--rule);border-radius:10px;overflow:hidden}
+.pages li{display:flex;align-items:center;gap:8px;border-top:1px solid var(--rule);padding:4px 8px 4px 10px}
+.pages li:first-child{border-top:0}
+.pages li.current{background:var(--soft)}
+.pages input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);flex-shrink:0}
+.pages .pick{flex:1;min-width:0;text-align:left;border:0;background:none;padding:8px 4px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pages li.current .pick{font-weight:700}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.field{display:flex;flex-direction:column;gap:4px;margin-top:12px}
+.field label,.field .lab{font-weight:700;font-size:15px}
+.field input[type=text],.field textarea,.field select{width:100%;border:1.5px solid var(--rule);border-radius:8px;background:var(--field);padding:8px 10px;min-height:40px}
+.field textarea{resize:vertical;min-height:64px;font-family:"Atkinson Hyperlegible",ui-monospace,monospace}
+.field input:focus,.field textarea:focus,.field select:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.help{margin:2px 0 0;font-size:14px;color:var(--muted)}
+.checks{display:grid;grid-template-columns:1fr;gap:6px;margin-top:12px}
+.checks label{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.checks input{width:18px;height:18px;margin-top:2px;accent-color:var(--accent);flex-shrink:0}
+details.more{margin-top:14px;border-top:1px solid var(--rule);padding-top:10px}
+details.more summary{cursor:pointer;font-weight:700;min-height:32px;display:flex;align-items:center}
+.qcard{border:1.5px solid var(--rule);border-radius:10px;padding:10px 12px 12px;margin-top:10px}
+.qcard .qtop{display:flex;align-items:center;gap:8px}
+.qcard .qtop b{flex:1}
+.qcard .field{margin-top:8px}
+.iconbtn{min-width:34px;min-height:34px;border-radius:8px;border:1.5px solid var(--rule);background:var(--panel);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+.iconbtn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.notes{margin:0;padding:10px 14px;border-radius:8px;background:var(--warn-bg);color:var(--warn-ink);font-size:15px}
+.notes:empty{display:none}
+.notes p{margin:0}
+.notes p + p{margin-top:4px}
+.status{min-height:22px;font-size:14px;color:var(--muted);margin:0}
+.key{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:14px;color:var(--muted);margin-top:6px}
+.key span{display:inline-flex;align-items:center;gap:6px}
+.key i{display:inline-block;width:14px;height:10px}
+
+/* ---- the worksheet itself (always printed on white) ---- */
+.ws-sheet{width:1056px;height:816px;overflow:hidden;background:#FFFFFF;color:#000000;padding:40px 44px;display:flex;flex-direction:column;gap:10px;
+  font-family:"Atkinson Hyperlegible","Helvetica Neue",Arial,sans-serif;font-size:17px;line-height:1.3;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.ws-sheet p{margin:0}
+.ws-head{height:108px;flex-shrink:0;display:flex;justify-content:space-between;align-items:flex-start;gap:24px}
+.ws-head-solo{height:auto}
+.ws-titles{display:flex;flex-direction:column;gap:6px;min-width:0}
+.ws-titles h1{margin:0;font-family:"Bricolage Grotesque","Arial Black",sans-serif;font-weight:800;font-size:60px;line-height:1;letter-spacing:-0.02em;color:#1E5B3F}
+.ws-sub{font-size:17px;line-height:22px;color:#3F3F3F}
+.ws-sub strong{color:#1E5B3F}
+.ws-meter{width:470px;height:108px;flex-shrink:0;border:2px solid #1E5B3F;border-radius:10px;padding:7px 14px;display:flex;flex-direction:column;justify-content:center;gap:4px}
+.ws-row{min-height:30px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ws-q{line-height:22px}
+.ws-line{width:72px;height:22px;border-bottom:2px solid #3F3F3F;flex-shrink:0}
+.ws-line-wide{width:80px;height:26px}
+.ws-chip{display:inline-flex;align-items:center;height:34px;padding:0 14px;border:1.5px solid #8F9893;border-radius:17px;white-space:nowrap}
+.ws-chip-sm{height:30px;border-radius:15px}
+.ws-chip-num{padding:0 16px}
+.ws-instr{flex-shrink:0;font-size:19px;line-height:24px;font-weight:700}
+.ws-block{flex-shrink:0}
+.ws-block svg{display:block}
+.ws-part{display:flex;flex-direction:column;gap:8px;min-height:0}
+.ws-part h2{margin:0;font-size:20px;line-height:24px;font-weight:700;color:#1E5B3F}
+.ws-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:28px;row-gap:10px}
+.ws-qblock{display:flex;flex-direction:column;gap:6px}
+.ws-choices{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.ws-checks{gap:6px 18px}
+.ws-check{display:inline-flex;align-items:center;gap:8px;height:34px}
+.ws-box{width:24px;height:24px;border:2px solid #3F3F3F;border-radius:4px;flex-shrink:0}
+.ws-map{grid-row:span 2;align-self:start;border:1.5px solid #CDD3CF;border-radius:10px;padding:10px 14px;display:flex;flex-direction:column;gap:6px}
+.ws-map svg{display:block;max-width:100%;height:auto}
+.ws-maptitle{font-weight:700;line-height:22px}
+.ws-muted{font-weight:400;color:#3F3F3F}
+
+#printRoot{display:none}
+@media print{
+  @page{size:11in 8.5in;margin:0}
+  html,body{background:#fff;height:auto;padding:0}
+  body > *:not(#printRoot){display:none !important}
+  #printRoot{display:block}
+  #printRoot .ws-sheet{break-after:page;page-break-after:always}
+  #printRoot .ws-sheet:last-child{break-after:auto;page-break-after:auto}
+}
+@media (prefers-reduced-motion: no-preference){
+  .paper{transition:box-shadow .2s}
+}
+</style>
+</head>
+<body>
+<header class="bar">
+  <h1>Dry-erase page maker</h1>
+  <span class="spacer"></span>
+  <button class="btn" id="printOne" type="button">Print this page</button>
+  <button class="btn primary" id="printChecked" type="button">Print checked pages</button>
+</header>
+<main class="app">
+  <aside class="panel" aria-label="Pages and page settings">
+    <h2>Pages</h2>
+    <p class="help" style="margin:0 0 8px">Check the pages you want to print together.</p>
+    <ul class="pages" id="pageList"></ul>
+    <div class="row">
+      <button class="btn small" id="newPage" type="button">New page</button>
+      <button class="btn small" id="dupPage" type="button">Duplicate</button>
+      <button class="btn small" id="upPage" type="button" aria-label="Move this page up">Move up</button>
+      <button class="btn small" id="downPage" type="button" aria-label="Move this page down">Move down</button>
+      <button class="btn small danger" id="delPage" type="button">Delete</button>
+    </div>
+
+    <h2>Heading</h2>
+    <div class="field"><label for="f_name">Name in this list</label><input type="text" id="f_name" data-k="name"></div>
+    <div class="field"><label for="f_title">Title</label><input type="text" id="f_title" data-k="title"></div>
+    <div class="two">
+      <div class="field"><label for="f_lead">Bold words first</label><input type="text" id="f_lead" data-k="lead" placeholder="G chord"></div>
+      <div class="field"><label for="f_subtitle">Then this line</label><input type="text" id="f_subtitle" data-k="subtitle"></div>
+    </div>
+
+    <h2>Music</h2>
+    <div class="two">
+      <div class="field"><label for="f_staff">Staff</label>
+        <select id="f_staff" data-k="staff"><option value="one">One line (unpitched)</option><option value="treble">Treble clef</option><option value="bass">Bass clef</option></select></div>
+      <div class="field"><label for="f_meter">Meter signature</label><input type="text" id="f_meter" data-k="meter" placeholder="4/4" inputmode="numeric"></div>
+    </div>
+    <div class="field"><label for="f_rhythm">Rhythm</label>
+      <textarea id="f_rhythm" data-k="rhythm" rows="2" spellcheck="false"></textarea>
+      <p class="help">Lengths in shorts, separated by spaces: 0.5 sixteenth, 1 short, 1.5 dotted short, 2 long, 3 dotted long, 4 lo-ong, 6 dotted lo-ong, 8 whole. Put R in front for a rest (R2). Add ~ to let a sound ring (8~). A | between measures is optional.</p>
+      <div class="key" aria-hidden="true"><span><i style="background:#ECB100"></i>short</span><span><i style="background:#D6253C"></i>long</span><span><i style="background:#1E5BC5"></i>dotted long</span><span><i style="background:#F1701C"></i>lo-ong</span><span><i style="background:#2A9D46"></i>whole</span></div>
+    </div>
+    <div class="field"><label for="f_pitches">Pitches</label>
+      <textarea id="f_pitches" data-k="pitches" rows="2" spellcheck="false"></textarea>
+      <p class="help">Letter names, one per sound (G, F#, Bb). Add an octave number to pick the octave (G3, C5); otherwise each note goes in the octave closest to the one before. Join notes with + for a chord (G4+B4+D5). Leave blank for unpitched instruments. If there are fewer pitches than sounds, the last one repeats.</p>
+    </div>
+    <div class="field"><label for="f_head">Noteheads</label>
+      <select id="f_head" data-k="head"><option value="normal">Regular</option><option value="x">× (unpitched sound)</option></select></div>
+    <div class="checks">
+      <label><input type="checkbox" data-k="colors"> Color icons by length</label>
+      <label><input type="checkbox" data-k="micro"> Show microbeats over the beats</label>
+      <label><input type="checkbox" data-k="repeat"> Repeat sign at the end</label>
+      <label><input type="checkbox" data-k="labels"> Row labels (Icons, Beats, Counts, Notes)</label>
+    </div>
+
+    <h2>Meter and counting</h2>
+    <div class="checks">
+      <label><input type="checkbox" data-k="meterQs"> Meter questions in the corner</label>
+      <label><input type="checkbox" data-k="writeMeter"> Students write the meter signature in a dashed box</label>
+      <label><input type="checkbox" data-k="counts"> Count boxes under each sound</label>
+    </div>
+    <div class="field"><label for="f_countText">Counting direction</label><input type="text" id="f_countText" data-k="countText">
+      <p class="help" id="countHelp">Leave blank to use the standard wording.</p></div>
+
+    <h2>Questions</h2>
+    <div class="field"><label for="f_partHeading">Heading over the questions</label><input type="text" id="f_partHeading" data-k="partHeading"></div>
+    <div id="qList"></div>
+    <div class="row"><button class="btn small" id="addQ" type="button">Add a question</button></div>
+
+    <details class="more" id="mapBox">
+      <summary>Pitch map</summary>
+      <p class="help">A small row of icons at different heights, such as the root of each chord.</p>
+      <div class="checks"><label><input type="checkbox" data-mk="show"> Show a pitch map</label></div>
+      <div class="two">
+        <div class="field"><label for="m_title">Title</label><input type="text" id="m_title" data-mk="title"></div>
+        <div class="field"><label for="m_note">Note after the title</label><input type="text" id="m_note" data-mk="note"></div>
+      </div>
+      <div class="field"><label for="m_labels">Labels, separated by commas</label><input type="text" id="m_labels" data-mk="labels" placeholder="G, F, C, G"></div>
+      <div class="field"><label for="m_pitches">One pitch for each label</label><input type="text" id="m_pitches" data-mk="pitches" placeholder="G3 F3 C3 G3"></div>
+      <div class="two">
+        <div class="field"><label for="m_rhythm">Rhythm in each group</label><input type="text" id="m_rhythm" data-mk="rhythm" placeholder="1 1 1 1 2"></div>
+        <div class="field"><label for="m_after">Place it after question</label><input type="text" id="m_after" data-mk="after" inputmode="numeric"></div>
+      </div>
+    </details>
+
+    <h2>Save and share</h2>
+    <p class="help" id="saveHelp" style="margin-top:0">Pages save in this browser as you type. Export makes a file you can open on another computer or send to someone, and Import brings pages in from that file.</p>
+    <div class="row">
+      <button class="btn small" id="exportBtn" type="button">Export pages</button>
+      <button class="btn small" id="importBtn" type="button">Import pages</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+      <button class="btn small" id="examplesBtn" type="button">Add the Red Bird examples</button>
+    </div>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+  </aside>
+  <section class="stage" aria-label="Preview">
+    <div class="notes" id="warnings" role="status" aria-live="polite"></div>
+    <div class="fit" id="fit"><div class="paper" id="paper"></div></div>
+  </section>
+</main>
+<div id="printRoot"></div>
+<script>
+const GLYPHS = {"noteheads.s0":["M215 114c-41 0 -71 -27 -71 -88c0 -104 91 -140 139 -140c41 0 70 27 70 88c0 104 -90 140 -138 140zM249 135c145 0 248 -64 248 -135s-103 -135 -248 -135s-249 64 -249 135s104 135 249 135z",[0.0,-0.54,1.988,0.54]],"noteheads.s1":["M316 67c0 23 -18 42 -42 42c-40 0 -209 -113 -237 -147c-7 -8 -10 -19 -10 -29c0 -23 18 -42 42 -42c40 0 209 113 237 147c7 8 10 19 10 29zM265 135c38 0 78 -13 78 -68c0 -27 -19 -111 -76 -150c-19 -13 -85 -52 -189 -52c-38 0 -78 13 -78 68c0 27 19 111 76 150 c19 13 85 52 189 52z",[0.0,-0.54,1.372,0.54]],"noteheads.s2":["M222 135c64 0 104 -35 104 -86c0 -89 -114 -184 -221 -184c-64 0 -105 35 -105 86c0 89 115 184 222 184z",[0.0,-0.54,1.304,0.54]],"noteheads.s0cross":["M214 38c-2 -1 -5 -2 -8 -2s-5 1 -7 2l-114 79l-49 -34l106 -72c4 -2 6 -7 6 -11s-2 -9 -6 -11l-106 -72l49 -34l114 79c2 1 4 2 7 2s6 -1 8 -2l114 -79l49 34l-106 72c-4 2 -6 7 -6 11s2 9 6 11l106 72l-49 34zM206 65l115 78c2 1 4 3 7 3s6 -2 8 -3l71 -49 c4 -2 6 -7 6 -11s-2 -8 -6 -10l-106 -73l106 -73c4 -2 6 -6 6 -10s-2 -9 -6 -11l-71 -49c-2 -1 -5 -3 -8 -3s-5 2 -7 3l-115 78l-114 -78c-2 -1 -4 -3 -7 -3s-6 2 -8 3l-71 49c-4 2 -6 7 -6 11s2 8 6 10l106 73l-106 73c-4 2 -6 6 -6 10s2 9 6 11l71 49c2 1 5 3 8 3 s5 -2 7 -3z",[0.0,-0.584,1.652,0.584]],"noteheads.s1cross":["M193 30c-2 -2 -5 -3 -8 -3s-6 1 -8 3l-110 81l-32 -24l103 -77c3 -2 5 -6 5 -10s-2 -8 -5 -10l-103 -77l32 -24l110 81c2 2 5 3 8 3s6 -1 8 -3l109 -81l33 24l-103 77c-3 2 -6 6 -6 10s3 8 6 10l103 77l-33 24zM185 56l109 82c2 2 5 2 8 2s6 0 8 -2l54 -41 c3 -2 6 -6 6 -10s-3 -9 -6 -11l-103 -76l103 -76c3 -2 6 -7 6 -11s-3 -8 -6 -10l-54 -41c-2 -2 -5 -2 -8 -2s-6 0 -8 2l-109 82l-110 -82c-2 -2 -5 -2 -8 -2s-5 0 -7 2l-55 41c-3 2 -5 6 -5 10s2 9 5 11l104 76l-104 76c-3 2 -5 7 -5 11s2 8 5 10l55 41c2 2 4 2 7 2 s6 0 8 -2z",[0.0,-0.56,1.48,0.56]],"noteheads.s2cross":["M163 31l125 101c2 2 5 3 8 3s6 -1 8 -3l18 -14c3 -2 4 -6 4 -10s-1 -8 -4 -10l-121 -98l121 -98c3 -2 4 -6 4 -10s-1 -8 -4 -10l-18 -14c-2 -2 -5 -3 -8 -3s-6 1 -8 3l-125 101l-125 -101c-2 -2 -5 -3 -8 -3s-6 1 -8 3l-17 14c-3 2 -5 6 -5 10s2 8 5 10l120 98l-120 98 c-3 2 -5 6 -5 10s2 8 5 10l17 14c2 2 5 3 8 3s6 -1 8 -3z",[0.0,-0.54,1.304,0.54]],"rests.0":["M367 -156h-359c-4 0 -8 4 -8 8v140c0 4 4 8 8 8h359c4 0 8 -4 8 -8v-140c0 -4 -4 -8 -8 -8z",[0.0,-0.0,1.5,0.624]],"rests.1":["M367 0h-359c-4 0 -8 4 -8 8v140c0 4 4 8 8 8h359c4 0 8 -4 8 -8v-140c0 -4 -4 -8 -8 -8z",[0.0,-0.624,1.5,-0.0]],"rests.2":["M-4 79c0 59 125 82 125 181c0 24 -8 47 -24 67l-39 46c-2 3 -3 6 -3 9c0 7 7 14 14 14c3 0 7 -1 10 -5l152 -182c7 -8 10 -17 10 -25c0 -59 -125 -82 -125 -181c0 -24 8 -47 24 -67l87 -104c2 -3 3 -5 3 -8c0 -7 -7 -14 -14 -14c-6 0 -48 48 -112 48 c-14 0 -52 -1 -52 -70c0 -35 11 -75 28 -96c6 -7 -4 -16 -10 -9c-46 55 -93 150 -93 204c0 12 0 40 36 40c34 0 85 -15 130 -37l-137 164c-7 8 -10 17 -10 25z",[-0.092,-1.584,0.964,1.278]],"rests.3":["M69 205c78 0 47 -100 92 -100c17 0 58 54 65 70c5 11 20 11 24 0l-126 -425c-7 -6 -16 -9 -24 -9s-17 3 -24 9l116 327c-35 -12 -70 -23 -107 -23c-47 0 -87 35 -87 80c0 39 31 71 71 71z",[-0.008,-0.82,1.0,1.036]],"rests.4":["M124 205c78 0 47 -100 92 -100c17 0 53 54 60 70c5 11 20 11 24 0l-182 -675c-7 -6 -15 -9 -23 -9s-17 3 -24 9l100 327c-35 -13 -72 -23 -109 -23c-47 0 -87 35 -87 80c0 39 31 71 71 71c78 0 47 -100 92 -100c17 0 57 53 62 70l47 152c-34 -12 -70 -23 -107 -23 c-47 0 -87 35 -87 80c0 39 31 71 71 71z",[-0.1,-0.82,1.2,2.036]],"clefs.G":["M264 -594c47 0 165 26 165 246c0 32 -2 64 -5 96c-5 -1 -44 -8 -89 -8c-193 0 -333 178 -333 372c0 178 133 306 251 440c-27 93 -49 170 -49 345c0 116 55 226 150 295c5 4 11 4 16 0c67 -81 132 -246 132 -359c0 -144 -87 -256 -183 -365c20 -69 39 -138 55 -208 c2 0 7 1 15 1c154 0 254 -127 254 -259c0 -112 -73 -212 -180 -245c3 -36 5 -72 5 -108c0 -19 0 -37 -1 -56c-7 -120 -89 -226 -206 -226c-108 0 -195 87 -195 195c0 58 53 104 112 104c54 0 95 -48 95 -104c0 -52 -43 -95 -95 -95c-12 0 -24 4 -35 9c26 -41 70 -70 121 -70 zM459 -205c71 24 117 92 117 166c0 92 -69 184 -179 193c1 -5 45 -212 62 -359zM71 31c0 -146 142 -251 267 -251c1 0 46 0 82 6c-7 63 -28 201 -64 367c-79 -9 -125 -62 -125 -121c0 -44 26 -92 82 -124c4 -4 7 -9 7 -14c0 -11 -9 -21 -20 -21c-14 0 -125 62 -125 186 c0 88 57 173 158 196c-14 60 -30 119 -46 178c-108 -121 -216 -242 -216 -402zM411 1050c-99 -50 -161 -151 -161 -262c0 -59 11 -123 33 -200c82 97 149 198 149 325c0 35 0 69 -21 137z",[0.008,-4.78,2.572,2.532]],"clefs.F":["M556 -125c0 29 23 52 52 52s52 -23 52 -52s-23 -52 -52 -52s-52 23 -52 52zM556 125c0 29 23 52 52 52s52 -23 52 -52s-23 -52 -52 -52s-52 23 -52 52zM233 261c171 0 292 -86 292 -248c0 -263 -264 -415 -517 -521c-2 -2 -5 -3 -8 -3c-6 0 -11 5 -11 11c0 3 1 6 3 8 c203 118 415 265 415 494c0 121 -64 237 -174 237c-79 0 -138 -57 -164 -133c14 8 28 13 43 13c55 0 100 -45 100 -100c0 -58 -44 -107 -100 -107c-60 0 -112 48 -112 107c0 132 103 242 233 242z",[-0.044,-1.044,2.64,2.044]],"flags.u3":["M0 0v-250h-14v250h14zM0 0c0 -198 207 -336 207 -534c0 -71 -16 -142 -42 -208c-4 -7 -10 -11 -17 -11c-12 0 -24 10 -21 25c26 62 41 127 41 194c0 104 -96 209 -168 284v250z",[-0.056,-0.0,0.828,3.012]],"flags.u4":["M0 0v-500h-14v500h14zM0 0c0 -178 201 -293 201 -471c0 -33 -9 -65 -23 -95c18 -37 29 -76 29 -118c0 -63 -16 -125 -42 -183c-4 -7 -10 -11 -17 -11c-12 0 -24 10 -21 25c26 53 41 110 41 169c0 98 -96 192 -168 259v212c0 -119 92 -209 153 -309c6 16 9 34 9 51 c0 97 -92 190 -162 258v213z",[-0.056,-0.0,0.828,3.512]],"flags.d3":["M0 0h-14v250h14v-250zM0 0v250c98 58 228 147 228 259c0 57 -15 112 -40 164c-3 15 9 25 21 25c7 0 14 -3 18 -10c25 -56 40 -117 40 -179c0 -203 -267 -306 -267 -509z",[-0.056,-2.792,1.068,-0.0]],"flags.d4":["M0 205c92 52 214 132 214 235c0 25 -5 50 -14 73c-79 -91 -200 -163 -200 -288v-20zM267 665c0 -44 -16 -82 -39 -116c16 -34 25 -71 25 -109c0 -181 -253 -259 -253 -440h-14v500h14v-70c98 49 228 129 228 235c0 22 -5 43 -13 63c-3 15 9 25 21 25c31 0 31 -87 31 -88z",[-0.056,-3.012,1.068,-0.0]],"dots.dot":["M0 0c0 32 25 57 57 57s57 -25 57 -57s-25 -57 -57 -57s-57 25 -57 57z",[0.0,-0.228,0.456,0.228]],"accidentals.sharp":["M0 121c0 7 5 13 11 15l49 17v163c0 9 8 17 17 17s17 -8 17 -17v-151l87 31v162c0 9 8 17 17 17s17 -8 17 -17v-150l39 13c10 4 21 -4 21 -15v-64c0 -7 -5 -13 -11 -15l-49 -18v-164l39 14c10 4 21 -4 21 -15v-65c0 -7 -5 -13 -11 -15l-49 -17v-163c0 -9 -8 -17 -17 -17 s-17 8 -17 17v151l-87 -31v-162c0 -9 -8 -17 -17 -17s-17 8 -17 17v150l-39 -13c-10 -4 -21 4 -21 15v64c0 7 5 13 11 15l49 18v164l-39 -14c-10 -4 -21 4 -21 15v65zM181 97l-87 -30v-164l87 30v164z",[0.0,-1.5,1.1,1.5]],"accidentals.flat":["M25 44l-1 -69c0 -4 -1 -7 -1 -11c0 -22 2 -44 4 -66c46 38 96 80 96 139c0 34 -14 69 -44 69c-31 0 -53 -29 -54 -62zM-25 463c8 4 16 7 25 7s17 -3 25 -7l-6 -349c26 19 56 30 88 30c53 0 93 -46 93 -100c0 -82 -90 -118 -153 -169c-14 -11 -22 -32 -40 -32 c-12 0 -21 9 -21 21z",[-0.1,-1.88,0.8,0.628]],"accidentals.natural":["M-7 375c7 4 16 6 24 6s16 -2 23 -6l-2 -177l109 18c1 0 2 1 3 1c9 0 17 -8 17 -17l7 -575c-7 -4 -16 -6 -24 -6s-17 2 -24 6l2 177l-109 -18c-1 0 -1 -1 -2 -1c-9 0 -17 8 -17 17zM132 114l-95 -15l-3 -213l96 15z",[-0.028,-1.524,0.696,1.524]],"zero":["M179 473c-66 0 -70 -100 -70 -183v-40v-40c0 -83 4 -183 70 -183s71 100 71 183v40v40c0 83 -5 183 -71 183zM179 500c115 0 180 -123 180 -250s-65 -250 -180 -250s-179 123 -179 250s64 250 179 250z",[0.0,-2.0,1.436,-0.0]],"one":["M0 250l109 250c5 12 29 -13 55 -13c14 0 26 7 39 13c7 4 15 -4 15 -15v-376c0 -45 26 -88 68 -88c7 0 11 -5 11 -10s-4 -11 -11 -11c-41 0 -81 13 -122 13s-82 -13 -123 -13c-7 0 -11 6 -11 11s4 10 11 10c42 0 68 43 68 88v258c0 11 -8 17 -15 17c-4 0 -7 -2 -9 -6 l-61 -139c-2 -6 -6 -8 -11 -8c-7 0 -14 5 -14 13c0 2 0 4 1 6z",[-0.004,-2.013,1.188,-0.0]],"two":["M227 0c-87 0 -89 65 -144 65c-30 0 -59 -21 -62 -55c-1 -7 -5 -10 -10 -10s-11 3 -11 10c0 154 232 171 232 345c0 60 -19 124 -71 124c-24 0 -46 -15 -46 -37c0 -27 35 -41 35 -68c0 -38 -31 -69 -69 -69s-68 31 -68 69c0 74 70 126 148 126c93 0 180 -58 180 -145 c0 -156 -160 -160 -254 -229c12 3 25 5 38 5c81 0 111 -58 171 -58c46 0 36 36 52 36c5 0 11 -4 11 -10c0 -21 -41 -99 -132 -99z",[0.0,-2.0,1.436,-0.0]],"three":["M258 264c0 -31 68 -19 68 -124c0 -91 -77 -140 -175 -140c-77 0 -151 41 -151 111c0 36 29 65 65 65s65 -29 65 -65c0 -25 -40 -28 -40 -53c0 -26 31 -37 61 -37c50 0 66 61 66 119c0 62 -1 110 -54 110h-82c-9 0 -13 7 -13 14s4 13 13 13h82c52 0 54 47 54 108 c0 56 -18 94 -70 94c-27 0 -55 -9 -55 -33c0 -22 35 -25 35 -47c0 -32 -25 -57 -57 -57s-57 25 -57 57c0 63 65 101 134 101c90 0 165 -35 165 -115c0 -126 -54 -81 -54 -121z",[0.0,-2.0,1.304,-0.0]],"four":["M-2 146c0 13 148 151 148 339c0 10 7 18 15 15c22 -7 44 -13 67 -13s45 6 67 13c12 4 21 -8 15 -15l-283 -333h173v147c0 32 34 24 65 67c11 15 18 32 25 49c4 9 20 7 20 -7v-256h68c9 0 13 -7 13 -14s-4 -13 -13 -13h-68v-16c0 -45 26 -88 68 -88c7 0 10 -5 10 -10 s-3 -11 -10 -11c-41 0 -82 13 -123 13s-82 -13 -123 -13c-7 0 -10 6 -10 11s3 10 10 10c42 0 68 43 68 88v16h-173c-21 0 -29 13 -29 21z",[-0.008,-2.003,1.564,-0.0]],"five":["M159 295c-83 0 -101 -53 -115 -53c-7 0 -14 5 -14 13v230c0 9 7 16 15 15c44 -8 89 -13 134 -13s89 5 133 13c13 2 21 -9 15 -15c-66 -66 -161 -87 -255 -87c-8 0 -15 -7 -15 -15v-108c28 28 63 47 102 47c114 0 182 -52 182 -161c0 -92 -83 -161 -179 -161 c-82 0 -162 38 -162 111c0 36 29 65 65 65s65 -29 65 -65c0 -25 -40 -28 -40 -53c0 -30 37 -37 72 -37c57 0 70 73 70 140c0 65 -17 134 -73 134z",[0.0,-2.001,1.364,-0.0]],"six":["M166 257c-57 0 -57 -52 -57 -118s0 -118 57 -118c58 0 64 51 64 118s-6 118 -64 118zM109 259c16 12 35 19 57 19c99 0 167 -46 167 -139s-68 -139 -167 -139c-111 0 -166 125 -166 250c0 128 69 250 186 250c68 0 133 -38 133 -101c0 -36 -29 -65 -65 -65s-65 29 -65 65 c0 23 39 26 39 49c0 19 -21 31 -42 31c-70 0 -78 -71 -78 -151c0 -23 1 -46 1 -69z",[0.0,-2.0,1.332,-0.0]],"seven":["M352 487c0 -19 -169 -204 -169 -400c0 -24 2 -48 7 -72c2 -10 -6 -18 -15 -15c-22 7 -44 13 -67 13s-44 -6 -66 -13c-10 -3 -19 6 -15 15c57 134 139 253 224 371c-22 -12 -44 -19 -65 -19c-60 0 -69 52 -117 52c-24 0 -42 -20 -42 -69v-87c0 -9 -7 -13 -14 -13 s-13 4 -13 13v224c0 9 6 13 13 13s14 -4 14 -13v-14c0 -9 10 -18 13 -14c19 27 52 41 85 41c71 0 72 -49 125 -49c56 0 75 49 88 49c7 0 14 -6 14 -13z",[0.0,-2.0,1.408,0.003]],"eight":["M256 283c26 31 45 65 45 105c0 55 -55 91 -114 91c-48 0 -76 -37 -76 -74c0 -22 10 -45 33 -58zM284 266c23 -13 80 -53 80 -124c0 -72 -65 -142 -185 -142c-92 0 -179 53 -179 138c0 51 37 90 73 126c-38 28 -57 66 -57 104c0 67 60 132 171 132c78 0 154 -41 154 -112 c0 -47 -25 -87 -57 -122zM101 246c-32 -31 -61 -64 -61 -108c0 -69 66 -117 139 -117c55 0 88 43 88 85c0 25 -11 51 -37 66z",[0.0,-2.0,1.456,-0.0]],"nine":["M166 243c57 0 58 52 58 118s-1 118 -58 118c-58 0 -64 -51 -64 -118s6 -118 64 -118zM224 241c-16 -12 -36 -19 -58 -19c-99 0 -166 46 -166 139s67 139 166 139c111 0 167 -125 167 -250c0 -128 -70 -250 -187 -250c-68 0 -133 38 -133 101c0 36 30 65 66 65 s65 -29 65 -65c0 -23 -39 -26 -39 -49c0 -19 20 -31 41 -31c70 0 78 71 78 151v69z",[0.0,-2.0,1.332,-0.0]]};
+
+// ===================== ENGINE: parsing, icons, notation, page markup =====================
+const BLOCK_W = 968, LABEL_W = 80, STAFF_X = 86;
+const DUR_COLORS = { 0.5: "#8A5A2B", 1: "#ECB100", 1.5: "#1A9E9E", 2: "#D6253C", 3: "#1E5BC5", 4: "#F1701C", 8: "#2A9D46" };
+const PLAIN_ICON = "#3A3A3A", BAR_DARK = "#6B6B6B", BAR_LIGHT = "#C8C8C8", LABEL_INK = "#3F3F3F", ACCENT = "#1E5B3F";
+const LETTER_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }, LETTER_IDX = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
+const EPS = 1e-9;
+
+function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function r2(v){ return Math.round(v * 100) / 100; }
+function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+function tint(hex, amt){
+  const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  const m = c => Math.round(c + (255 - c) * amt);
+  return "#" + [m(r), m(g), m(b)].map(c => c.toString(16).padStart(2, "0")).join("");
+}
+
+// ---- parsing ----
+function parseMeter(text){
+  const m = String(text || "").trim().match(/^(\d{1,2})\s*\/\s*(\d{1,2})$/);
+  const num = m ? +m[1] : 0, den = m ? +m[2] : 0;
+  if (!m || ![2, 4, 8].includes(den) || num < 1 || num > 12) return { ok: false, num: 4, den: 4, measure: 8, beat: 2, micro: 1, compound: false };
+  const compound = den === 8 && num >= 6 && num % 3 === 0;
+  return { ok: true, num, den, measure: num * 8 / den, beat: compound ? 3 : 8 / den, micro: den === 2 ? 2 : 1, compound };
+}
+
+function parseRhythm(text){
+  const events = [], bad = [];
+  let t = 0;
+  for (const tok of String(text || "").replace(/[|,]/g, " ").split(/\s+/).filter(Boolean)){
+    const m = tok.match(/^([Rr])?(\d+(?:\.\d+)?|\.\d+)(~)?$/);
+    const len = m ? parseFloat(m[2]) : NaN;
+    if (!m || !(len > 0) || Math.abs(len * 2 - Math.round(len * 2)) > EPS || len > 64){ bad.push(tok); continue; }
+    events.push({ t, len, rest: !!m[1], ring: !!m[3] && !m[1] });
+    t += len;
+  }
+  return { events, total: t, bad };
+}
+
+function parseNoteToken(tok){
+  const m = tok.match(/^([A-Ga-g])(#|b|♯|♭)?(\d)?$/);
+  if (!m) return null;
+  return { L: m[1].toUpperCase(), acc: m[2] ? (m[2] === "#" || m[2] === "♯" ? 1 : -1) : 0, oct: m[3] === undefined ? null : +m[3] };
+}
+function makeNote(L, acc, oct){ return { L, acc, oct, midi: (oct + 1) * 12 + LETTER_PC[L] + acc, dia: oct * 7 + LETTER_IDX[L] }; }
+function nearestOct(L, acc, prev){
+  let best = null;
+  for (let o = prev.oct - 1; o <= prev.oct + 1; o++){
+    const d = Math.abs((o + 1) * 12 + LETTER_PC[L] + acc - prev.midi);
+    if (!best || d < best.d) best = { o, d };
+  }
+  return best.o;
+}
+function parsePitches(text, nSounds, defOct){
+  const toks = String(text || "").replace(/,/g, " ").split(/\s+/).filter(Boolean);
+  if (!toks.length) return { list: null, bad: [], extra: 0 };
+  const list = [], bad = [];
+  let prev = null, last = null;
+  for (let i = 0; i < nSounds; i++){
+    const tok = toks[i];
+    if (tok === undefined || tok === "-"){ list.push(last); continue; }
+    const chord = [];
+    let p = prev, first = null;
+    for (const part of tok.split("+")){
+      const n = parseNoteToken(part);
+      if (!n){ bad.push(part); continue; }
+      const oct = n.oct !== null ? n.oct : (p ? nearestOct(n.L, n.acc, p) : defOct);
+      const note = makeNote(n.L, n.acc, clamp(oct, 0, 8));
+      chord.push(note);
+      if (!first) first = note;
+      p = note;
+    }
+    if (chord.length){
+      chord.sort((a, b) => a.dia - b.dia || a.midi - b.midi);
+      prev = first; last = chord;
+    }
+    list.push(chord.length ? chord : last);
+  }
+  return { list, bad, extra: Math.max(0, toks.length - nSounds) };
+}
+
+function buildModel(page){
+  const meter = parseMeter(page.meter);
+  const R = parseRhythm(page.rhythm);
+  const evs = R.events.map(e => Object.assign({}, e));
+  const sounds = evs.filter(e => !e.rest);
+  const defOct = page.staff === "bass" ? 3 : 4;
+  const P = parsePitches(page.pitches, sounds.length, defOct);
+  sounds.forEach((e, i) => { e.notes = P.list ? P.list[i] : null; });
+  const warnings = [];
+  if (!meter.ok) warnings.push("The meter signature should look like 4/4, 3/4, 2/4 or 6/8. Using 4/4 for now.");
+  if (R.bad.length) warnings.push(`These rhythm entries weren’t understood and were skipped: ${R.bad.join(" ")}`);
+  if (P.bad.length) warnings.push(`These pitches weren’t understood: ${P.bad.join(" ")}`);
+  if (P.extra) warnings.push(`There ${P.extra === 1 ? "is 1 more pitch" : `are ${P.extra} more pitches`} than sounds; the extra ${P.extra === 1 ? "one was" : "ones were"} left out.`);
+  if (!evs.length){
+    evs.push({ t: 0, len: meter.measure, rest: true });
+    warnings.push("Type a rhythm to see the notation.");
+  }
+  const measures = Math.max(1, Math.ceil(R.total / meter.measure - EPS));
+  const total = measures * meter.measure;
+  if (R.total > 0 && R.total < total - EPS){
+    evs.push({ t: R.total, len: total - R.total, rest: true, pad: true });
+    warnings.push("The last measure was short, so the rest of it is shown as rest.");
+  }
+  if (total / meter.measure > 4 && meter.measure >= 8) warnings.push("More than four measures makes the notation small. Two measures fit best.");
+  for (let i = 0; i < evs.length; i++){
+    if (evs[i].rest) continue;
+    let j = i + 1;
+    while (j < evs.length && evs[j].rest) j++;
+    evs[i].next = j < evs.length ? evs[j].t : total;
+  }
+  return { meter, evs, total, measures, warnings, pitched: !!P.list };
+}
+
+// ---- small SVG helpers ----
+function rect(x, y, w, h, fill, extra){ return `<rect x="${r2(x)}" y="${r2(y)}" width="${r2(Math.max(0, w))}" height="${r2(Math.max(0, h))}" fill="${fill}"${extra || ""}/>`; }
+function glyph(name, x, y, ss){
+  const g = GLYPHS[name];
+  return `<path transform="translate(${r2(x)} ${r2(y)}) scale(${(ss * 0.004).toFixed(5)} ${(-ss * 0.004).toFixed(5)})" d="${g[0]}"/>`;
+}
+function gw(name){ const b = GLYPHS[name][1]; return b[2] - b[0]; }
+function label(text, y){ return `<text x="0" y="${r2(y + 6)}" font-family="Atkinson Hyperlegible, Arial, sans-serif" font-weight="700" font-size="17" fill="${LABEL_INK}">${esc(text)}</text>`; }
+
+// ---- splitting durations into notatable pieces ----
+const NOTE_VALUES = [8, 6, 4, 3, 2, 1.5, 1, 0.5];
+function fits(s, v, meter){
+  const b = meter.beat, sb = s % b;
+  if (v === 8) return s < EPS && meter.measure === 8;
+  if (meter.compound){
+    if (v === 6 || v === 3) return sb < EPS;
+    if (v === 4) return false;
+    return sb + v <= b + EPS;
+  }
+  if (v < b) return sb + v <= b + EPS;
+  if (v === 2 && b === 2) return Math.abs(s - Math.round(s)) < EPS;   // allows short-long-short syncopation
+  return sb < EPS;
+}
+const REST_VALUES = [8, 4, 2, 1, 0.5];
+function restFits(s, v, meter){
+  if (meter.compound) return fits(s, v, meter);
+  if (v === 4) return s % 4 < EPS && fits(s, v, meter);
+  return fits(s, v, meter);
+}
+function splitPiece(start, len, meter, isRest){
+  const out = [];
+  let s = start, L = len, guard = 0;
+  const values = isRest && !meter.compound ? REST_VALUES : NOTE_VALUES;
+  while (L > EPS && guard++ < 200){
+    let pick = null;
+    for (const v of values){ if (v <= L + EPS && (isRest ? restFits(s % meter.measure, v, meter) : fits(s % meter.measure, v, meter))){ pick = v; break; } }
+    if (!pick) pick = 0.5;
+    out.push({ t: s, v: pick });
+    s += pick; L -= pick;
+  }
+  return out;
+}
+
+// ---- the notation block: icons, beat bars, count boxes, staff ----
+function renderBlock(page, model){
+  const meter = model.meter, total = model.total;
+  const fiveLine = page.staff === "treble" || page.staff === "bass";
+  const hasClef = fiveLine;
+  // spacing: fit the measures across the block, with a staff size that suits the spacing
+  let ss = 11, X0 = 0, S = 0;
+  for (let k = 0; k < 3; k++){
+    const prefix = ss * ((hasClef ? 3.6 : 0.8) + 4.0 + 1.6);
+    X0 = STAFF_X + prefix;
+    S = (BLOCK_W - X0 - ss * 3.0) / total;
+    ss = clamp(S / 4.4, 6.5, 11);
+  }
+  const Q = 0.75 * S, gap = S - Q;
+  const slot = t => X0 + t * S;
+  const headCx = t => slot(t) + Q / 2;
+  const parts = [];
+
+  // --- icons ---
+  const allMidi = [];
+  model.evs.forEach(e => { if (!e.rest && e.notes) e.notes.forEach(n => allMidi.push(n.midi)); });
+  const maxM = allMidi.length ? Math.max(...allMidi) : 0, minM = allMidi.length ? Math.min(...allMidi) : 0;
+  const span = maxM - minM;
+  const H = span ? Math.min(Q / 2, (200 - Q) / span) : 0;
+  const yI = 8, iconsH = Q + span * H;
+  const yOfMidi = m => yI + (maxM - m) * H;
+  const colorOf = len => page.colors === false ? PLAIN_ICON : (DUR_COLORS[len] || PLAIN_ICON);
+  const ringZones = [];
+  let lastY = null;
+  model.evs.forEach(e => {
+    if (!e.rest){
+      const ys = e.notes ? e.notes.map(n => yOfMidi(n.midi)) : [yI];
+      ys.forEach(y => parts.push(rect(slot(e.t), y, e.len * S - gap, Q, colorOf(e.len))));
+      lastY = Math.max(...ys);
+      if (e.ring && e.next > e.t + e.len + EPS){
+        const x1 = slot(e.t) + e.len * S - gap, x2 = slot(e.next) - gap;
+        ys.forEach(y => parts.push(rect(x1, y, x2 - x1, Q, tint(colorOf(e.len), 0.78))));
+        ringZones.push([e.t + e.len, e.next]);
+      }
+    }
+  });
+  // rests: one outlined box per beat, at the height of the sound before them
+  lastY = null;
+  model.evs.forEach((e, i) => {
+    if (!e.rest){ lastY = e.notes ? yOfMidi(e.notes[0].midi) : yI; return; }
+    let y = lastY;
+    if (y === null){ const nx = model.evs.slice(i).find(x => !x.rest); y = nx && nx.notes ? yOfMidi(nx.notes[0].midi) : yI; }
+    let s = e.t;
+    const end = e.t + e.len;
+    while (s < end - EPS){
+      const nb = Math.min(end, (Math.floor(s / meter.beat + EPS) + 1) * meter.beat);
+      const ringing = ringZones.some(z => s >= z[0] - EPS && nb <= z[1] + EPS);
+      if (!ringing) parts.push(rect(slot(s) + 0.75, y + 0.75, (nb - s) * S - gap - 1.5, Q - 1.5, "#FFFFFF", ` stroke="#8C8C8C" stroke-width="1.5"`));
+      s = nb;
+    }
+  });
+  if (page.labels !== false) parts.push(label("Icons", yI + iconsH / 2));
+
+  // --- beat bars ---
+  const g1 = Q / 3, bh = Q * 0.375;
+  let y = yI + iconsH + g1;
+  const yBarsTop = y;
+  if (page.micro !== false){
+    for (let t = 0; t < total - EPS; t += meter.micro){
+      const onBeat = Math.abs((t / meter.beat) - Math.round(t / meter.beat)) < EPS;
+      parts.push(rect(slot(t), y, meter.micro * S - gap, bh, onBeat ? BAR_DARK : BAR_LIGHT));
+    }
+    y += bh + g1;
+  }
+  for (let t = 0; t < total - EPS; t += meter.beat) parts.push(rect(slot(t), y, meter.beat * S - gap, bh, BAR_DARK));
+  const yBarsBottom = y + bh;
+  if (page.labels !== false) parts.push(label("Beats", (yBarsTop + yBarsBottom) / 2));
+  for (let m = 1; m < model.measures; m++){
+    const x = slot(m * meter.measure) - gap / 2;
+    parts.push(rect(x - 1, yI - 4, 2, yBarsBottom - yI + 8, "#000000"));
+  }
+
+  // --- count boxes ---
+  y = yBarsBottom + 14;
+  if (page.counts !== false){
+    const hC = 42;
+    const soundStarts = model.evs.filter(e => !e.rest).map(e => e.t).concat([total]);
+    model.evs.forEach(e => {
+      if (e.rest) return;
+      const nextStart = soundStarts.find(t => t > e.t + EPS);
+      const bw = Math.min(Q + 4, (nextStart - e.t) * S - 4);
+      parts.push(rect(slot(e.t) - 2, y, bw, hC, "#FFFFFF", ` rx="6" stroke="#6F7672" stroke-width="1.6"`));
+      if (e.ring){
+        for (let b = Math.ceil((e.t + EPS) / meter.beat) * meter.beat; b < e.next - EPS; b += meter.beat)
+          parts.push(rect(slot(b) - 2, y, Q + 4, hC, "#E9F2EC", ` rx="6" stroke="#7FA38D" stroke-width="1.6" stroke-dasharray="5 3"`));
+      }
+    });
+    if (page.labels !== false) parts.push(label("Counts", y + hC / 2));
+    y += hC + 12;
+  }
+
+  // --- staff notation ---
+  const st = engraveStaff(page, model, { ss, S, Q, gap, slot, headCx, fiveLine, hasClef });
+  const yMid = y + (-st.minY + 0.3) * ss;
+  parts.push(st.draw(yMid));
+  if (page.labels !== false) parts.push(label("Notes", yMid));
+  const height = Math.ceil(yMid + (st.maxY + 0.3) * ss + 4);
+  const svg = `<svg class="notation" xmlns="http://www.w3.org/2000/svg" width="${BLOCK_W}" height="${height}" viewBox="0 0 ${BLOCK_W} ${height}" role="img" aria-label="${esc(describeBlock(page, model))}">${parts.join("")}</svg>`;
+  return { svg, height };
+}
+
+function describeBlock(page, model){
+  const n = model.measures;
+  const sounds = model.evs.filter(e => !e.rest).length;
+  return `${n} ${n === 1 ? "measure" : "measures"} of the ${page.title || "part"}: icons over beat bars, ${page.counts === false ? "" : "count boxes, "}and the same part on a ${page.staff === "treble" ? "treble clef staff" : page.staff === "bass" ? "bass clef staff" : "one-line staff"}, with ${sounds} ${sounds === 1 ? "sound" : "sounds"}.`;
+}
+
+function engraveStaff(page, model, L){
+  const { ss, S, gap, slot, headCx, fiveLine, hasClef } = L;
+  const meter = model.meter;
+  const items = [];   // {y0, y1, svg(yMid)}
+  const add = (y0, y1, fn) => items.push({ y0, y1, fn });
+  const Y = (ym, yr) => ym + yr * ss;
+  const lineTop = fiveLine ? -2 : 0, lineBot = fiveLine ? 2 : 0;
+  const barTop = fiveLine ? -2 : -1, barBot = fiveLine ? 2 : 1;
+  const ref = page.staff === "bass" ? 18 : 30;   // diatonic number of the bottom line (G2 or E4)
+  const posOf = n => (fiveLine && n) ? 2 - (n.dia - ref) * 0.5 : 0;
+  const cross = page.head === "x";
+  const STEM_W = 0.1158;
+  const endX = slot(model.total) - gap / 2 + 1.4 * ss;
+
+  // staff lines
+  const lines = fiveLine ? [-2, -1, 0, 1, 2] : [0];
+  add(lineTop, lineBot, ym => lines.map(l => rect(STAFF_X, Y(ym, l) - 0.05 * ss, endX - STAFF_X, Math.max(1.1, 0.1 * ss), "#000000")).join(""));
+  // clef
+  let x = STAFF_X + 0.8 * ss;
+  if (hasClef){
+    const name = page.staff === "bass" ? "clefs.F" : "clefs.G", yr = page.staff === "bass" ? -1 : 1, b = GLYPHS[name][1], cx = x;
+    add(yr + b[1], yr + b[3], ym => glyph(name, cx, Y(ym, yr), ss));
+    x += 3.2 * ss;
+  }
+  // meter signature: a dashed box for students, or the numbers
+  const boxX = x;
+  if (page.writeMeter !== false){
+    add(-2.7, 2.7, ym => rect(boxX, Y(ym, -2.7), 3.8 * ss, 5.4 * ss, "#FFFFFF", ` rx="${r2(0.6 * ss)}" stroke="${ACCENT}" stroke-width="2.2" stroke-dasharray="7 5"`));
+  } else {
+    const num = String(meter.num), den = String(meter.den);
+    const names = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+    const rowSvg = (str, base, ym) => {
+      const ws = str.split("").map(c => gw(names[+c]));
+      let cx = boxX + (3.8 * ss - ws.reduce((a, b) => a + b, 0) * ss) / 2;
+      return str.split("").map((c, i) => { const s = glyph(names[+c], cx, Y(ym, base), ss); cx += ws[i] * ss; return s; }).join("");
+    };
+    add(-2, 2, ym => rowSvg(num, 0, ym) + rowSvg(den, 2, ym));
+  }
+
+  // pieces: split each event at bar lines and into notatable values
+  const pieces = [];
+  model.evs.forEach(e => {
+    let s = e.t;
+    const end = e.t + e.len, segs = [];
+    while (s < end - EPS){
+      const mEnd = (Math.floor(s / meter.measure + EPS) + 1) * meter.measure;
+      const e2 = Math.min(end, mEnd);
+      segs.push([s, e2]);
+      s = e2;
+    }
+    segs.forEach(([a, b]) => {
+      if (e.rest && Math.abs(a % meter.measure) < EPS && Math.abs(b - a - meter.measure) < EPS){
+        pieces.push({ rest: true, wholeBar: true, t: a, v: meter.measure });
+        return;
+      }
+      splitPiece(a, b - a, meter, e.rest).forEach(p => pieces.push({ rest: e.rest, t: p.t, v: p.v, ev: e }));
+    });
+  });
+  const sounding = pieces.filter(p => !p.rest);
+  sounding.forEach((p, i) => {
+    const nx = sounding[i + 1];
+    p.tieNext = nx && nx.ev === p.ev ? nx : null;
+    p.lv = p.ev.ring && !(nx && nx.ev === p.ev);
+  });
+
+  // beam groups
+  const groups = [];
+  let cur = null;
+  pieces.forEach(p => {
+    const beamable = !p.rest && p.v < 2;
+    const beatIdx = Math.floor(p.t / meter.beat + EPS);
+    if (beamable && cur && Math.abs(cur.end - p.t) < EPS && cur.beat === beatIdx){ cur.notes.push(p); cur.end = p.t + p.v; }
+    else if (beamable){ cur = { notes: [p], end: p.t + p.v, beat: beatIdx }; groups.push(cur); }
+    else cur = null;
+  });
+  // in 4/4, two full beats of shorts in the same half measure share one beam
+  if (meter.num === 4 && meter.den === 4){
+    for (let i = 0; i < groups.length - 1; i++){
+      const a = groups[i], b = groups[i + 1];
+      const plain = g => g.notes.length === 2 && g.notes.every(n => n.v === 1);
+      if (plain(a) && plain(b) && b.beat === a.beat + 1 && a.beat % 2 === 0 && Math.abs(a.end - b.notes[0].t) < EPS){
+        a.notes.push(...b.notes); a.end = b.end; groups.splice(i + 1, 1);
+      }
+    }
+  }
+  groups.forEach(g => { if (g.notes.length > 1) g.notes.forEach(n => { n.group = g; }); });
+
+  // per-note geometry
+  const headName = v => "noteheads." + (v >= 8 ? "s0" : v >= 4 ? "s1" : "s2") + (cross ? "cross" : "");
+  sounding.forEach(p => {
+    p.ys = p.ev.notes ? p.ev.notes.map(n => posOf(n)) : [0];
+    p.accs = p.ev.notes ? p.ev.notes.map(n => n.acc) : [0];
+    p.head = headName(p.v);
+    p.hw = gw(p.head) * ss;
+    p.hx = headCx(p.t) - p.hw / 2;
+    p.top = Math.min(...p.ys); p.bot = Math.max(...p.ys);
+  });
+  const dirFor = list => {
+    if (!fiveLine) return -1;   // up
+    const top = Math.min(...list.map(p => p.top)), bot = Math.max(...list.map(p => p.bot));
+    return (-top) >= bot ? 1 : -1;   // notes mostly above the middle line: stems down (1)
+  };
+  sounding.forEach(p => { if (!p.group) p.dir = dirFor([p]); });
+  groups.forEach(g => { if (g.notes.length > 1){ const d = dirFor(g.notes); g.notes.forEach(n => { n.dir = d; }); } });
+  const stemX = p => p.dir < 0 ? p.hx + p.hw - STEM_W * ss / 2 : p.hx + STEM_W * ss / 2;   // stem center
+  sounding.forEach(p => {
+    if (p.v >= 8) return;
+    if (p.dir < 0) p.tip = Math.min(p.top - 3.5, fiveLine ? 0 : -3.5);
+    else p.tip = Math.max(p.bot + 3.5, 0);
+  });
+  // beams set a shared tip
+  groups.forEach(g => {
+    if (g.notes.length < 2) return;
+    const d = g.notes[0].dir;
+    const tip = d < 0 ? Math.min(...g.notes.map(n => n.tip)) : Math.max(...g.notes.map(n => n.tip));
+    g.notes.forEach(n => { n.tip = tip; });
+    g.tip = tip; g.dir = d;
+  });
+
+  // draw notes
+  sounding.forEach(p => {
+    // ledger lines
+    if (fiveLine){
+      p.ys.forEach(yr => {
+        for (let l = 3; l <= yr + EPS; l++) add(l - 0.1, l + 0.1, ym => rect(p.hx - 0.35 * ss, Y(ym, l) - 0.08 * ss, p.hw + 0.7 * ss, 0.16 * ss, "#000000"));
+        for (let l = -3; l >= yr - EPS; l--) add(l - 0.1, l + 0.1, ym => rect(p.hx - 0.35 * ss, Y(ym, l) - 0.08 * ss, p.hw + 0.7 * ss, 0.16 * ss, "#000000"));
+      });
+    }
+    // heads, accidentals, dots
+    p.ys.forEach((yr, i) => {
+      add(yr - 0.6, yr + 0.6, ym => glyph(p.head, p.hx, Y(ym, yr), ss));
+      const a = p.accs[i];
+      if (a && fiveLine){
+        const an = a > 0 ? "accidentals.sharp" : "accidentals.flat", b = GLYPHS[an][1];
+        add(yr + b[1], yr + b[3], ym => glyph(an, p.hx - (b[2] + 0.25) * ss, Y(ym, yr), ss));
+      }
+      if (p.v === 1.5 || p.v === 3 || p.v === 6){
+        const onLine = Math.abs(yr - Math.round(yr)) < EPS;
+        const dy = onLine ? yr - 0.5 : yr;
+        add(dy - 0.3, dy + 0.3, ym => glyph("dots.dot", p.hx + p.hw + 0.42 * ss, Y(ym, dy), ss));
+      }
+    });
+    // stem and flag
+    if (p.v < 8){
+      const sx = stemX(p);
+      const from = p.dir < 0 ? p.bot - 0.2 : p.top + 0.2;
+      const y0 = Math.min(from, p.tip), y1 = Math.max(from, p.tip);
+      add(y0, y1, ym => rect(sx - STEM_W * ss / 2, Y(ym, y0), STEM_W * ss, (y1 - y0) * ss, "#000000"));
+      if (p.v < 2 && !p.group){
+        const fl = (p.dir < 0 ? "flags.u" : "flags.d") + (p.v === 0.5 ? "4" : "3"), b = GLYPHS[fl][1];
+        const fy = p.tip + (p.dir < 0 ? 0.03 : -0.03);
+        add(fy + b[1], fy + b[3], ym => glyph(fl, sx + STEM_W * ss / 2, Y(ym, fy), ss));
+      }
+    }
+  });
+  // beams
+  groups.forEach(g => {
+    if (g.notes.length < 2) return;
+    const T = 0.48, d = g.dir;
+    const xs = g.notes.map(stemX);
+    const y0 = d < 0 ? g.tip : g.tip - T;
+    add(y0, y0 + T, ym => rect(xs[0] - STEM_W * ss / 2, Y(ym, y0), xs[xs.length - 1] - xs[0] + STEM_W * ss, T * ss, "#000000"));
+    const y2 = d < 0 ? g.tip + 0.75 : g.tip - 0.75 - T;
+    g.notes.forEach((n, i) => {
+      if (n.v !== 0.5) return;
+      const nx = g.notes[i + 1], pv = g.notes[i - 1];
+      if (nx && nx.v === 0.5){
+        add(y2, y2 + T, ym => rect(xs[i] - STEM_W * ss / 2, Y(ym, y2), xs[i + 1] - xs[i] + STEM_W * ss, T * ss, "#000000"));
+      } else if (!(pv && pv.v === 0.5)){
+        const stub = 1.1 * ss, toLeft = !nx;
+        const sx0 = toLeft ? xs[i] - stub : xs[i] - STEM_W * ss / 2;
+        add(y2, y2 + T, ym => rect(sx0, Y(ym, y2), stub + STEM_W * ss / 2, T * ss, "#000000"));
+      }
+    });
+  });
+  // ties and let-ring ties
+  const tieDirs = p => {
+    if (p.ys.length === 1) return [p.dir < 0 ? 1 : -1];
+    return p.ys.map((yr, i) => i === 0 ? 1 : i === p.ys.length - 1 ? -1 : (yr < 0 ? -1 : 1));
+  };
+  const tiePath = (xa, xb, yr, dir, ym) => {
+    const w = xb - xa;
+    if (w < 2) return "";
+    const h = clamp(0.3 + (w / ss) * 0.08, 0.4, 0.8) * ss, th = 0.22 * ss;
+    const y0 = Y(ym, yr + dir * 0.3);
+    return `<path d="M${r2(xa)} ${r2(y0)} C${r2(xa + w * 0.25)} ${r2(y0 + dir * h)} ${r2(xb - w * 0.25)} ${r2(y0 + dir * h)} ${r2(xb)} ${r2(y0)} C${r2(xb - w * 0.25)} ${r2(y0 + dir * (h - th))} ${r2(xa + w * 0.25)} ${r2(y0 + dir * (h - th))} ${r2(xa)} ${r2(y0)}Z" fill="#000000"/>`;
+  };
+  sounding.forEach(p => {
+    const dirs = tieDirs(p);
+    if (p.tieNext){
+      const q = p.tieNext;
+      p.ys.forEach((yr, i) => add(yr - 1.2, yr + 1.2, ym => tiePath(p.hx + p.hw + 0.12 * ss, q.hx - 0.12 * ss, yr, dirs[i], ym)));
+    } else if (p.lv){
+      const nextHead = headCx(p.ev.next) - 1.2 * ss;
+      const xb = Math.min(p.hx + p.hw + 5.6 * ss, nextHead);
+      p.ys.forEach((yr, i) => add(yr - 1.2, yr + 1.2, ym => tiePath(p.hx + p.hw + 0.1 * ss, xb, yr, dirs[i], ym)));
+    }
+  });
+  // rests
+  const restName = v => v >= 8 ? "rests.0" : v >= 4 ? "rests.1" : v >= 2 ? "rests.2" : v >= 1 ? "rests.3" : "rests.4";
+  pieces.filter(p => p.rest).forEach(p => {
+    let name, cx;
+    if (p.wholeBar){ name = "rests.0"; cx = (slot(p.t) - gap / 2 + slot(p.t + p.v) - gap / 2) / 2; }
+    else { name = restName(p.v); cx = headCx(p.t); }
+    const b = GLYPHS[name][1];
+    const yr = name === "rests.0" ? (fiveLine ? -1 : 0) : 0;
+    const gx = cx - ((b[2] - b[0]) / 2 + b[0]) * ss;
+    add(yr + b[1], yr + b[3], ym => glyph(name, gx, Y(ym, yr), ss));
+    if (!p.wholeBar && (p.v === 1.5 || p.v === 3 || p.v === 6)) add(-0.8, -0.2, ym => glyph("dots.dot", gx + (b[2] + 0.3) * ss, Y(ym, -0.5), ss));
+  });
+  // bar lines and the end
+  for (let m = 1; m < model.measures; m++){
+    const bx = slot(m * meter.measure) - gap / 2;
+    add(barTop, barBot, ym => rect(bx - 0.08 * ss, Y(ym, barTop), 0.16 * ss, (barBot - barTop) * ss, "#000000"));
+  }
+  add(barTop, barBot, ym => {
+    let s = rect(endX - 0.5 * ss, Y(ym, barTop), 0.5 * ss, (barBot - barTop) * ss, "#000000");
+    s += rect(endX - 1.0 * ss, Y(ym, barTop), 0.16 * ss, (barBot - barTop) * ss, "#000000");
+    if (page.repeat !== false) [-0.5, 0.5].forEach(d => { s += glyph("dots.dot", endX - 1.7 * ss, Y(ym, d), ss); });
+    return s;
+  });
+
+  const minY = Math.min(...items.map(i => i.y0)), maxY = Math.max(...items.map(i => i.y1));
+  return { minY, maxY, draw: ym => items.map(i => i.fn(ym)).join("") };
+}
+
+// ---- pitch map (for example, the roots of each chord) ----
+function renderPitchMap(page){
+  const mp = page.map || {};
+  const labels = String(mp.labels || "").split(",").map(s => s.trim());
+  const P = parsePitches(mp.pitches || "", labels.length, page.staff === "bass" ? 3 : 4);
+  const R = parseRhythm(mp.rhythm || "2");
+  const sounds = R.events;
+  if (!P.list || !labels.length) return "";
+  const slotW = 16, Q = 12, gapW = slotW - Q, groupGap = 22, H = 6;
+  const mids = P.list.map(c => c ? c[0].midi : 0);
+  const maxM = Math.max(...mids), minM = Math.min(...mids);
+  const groupW = Math.max(R.total * slotW - gapW, 12);
+  const h = 22 + 4 + Q + (maxM - minM) * H;
+  const W = labels.length * groupW + (labels.length - 1) * groupGap;
+  let s = "";
+  labels.forEach((lab, gi) => {
+    const gx = gi * (groupW + groupGap);
+    s += `<text x="${gx}" y="18" font-family="Atkinson Hyperlegible, Arial, sans-serif" font-weight="700" font-size="18" fill="#000000">${esc(lab)}</text>`;
+    const y = 26 + (maxM - mids[gi]) * H;
+    sounds.forEach(e => {
+      const x = gx + e.t * slotW, w = e.len * slotW - gapW;
+      if (e.rest) s += rect(x + 0.75, y + 0.75, w - 1.5, Q - 1.5, "#FFFFFF", ` stroke="#8C8C8C" stroke-width="1.5"`);
+      else s += rect(x, y, w, Q, page.colors === false ? PLAIN_ICON : (DUR_COLORS[e.len] || PLAIN_ICON));
+    });
+  });
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${h}" viewBox="0 0 ${W} ${h}" role="img" aria-label="${esc((mp.title || "Pitch map") + ": " + labels.join(", "))}">${s}</svg>`;
+}
+
+// ---- the whole printable page ----
+function autoCountText(model){
+  return model.evs.some(e => e.ring) ? "Write your strike count in the white box, then count the ring in the green boxes." : "Under each sound, write its count: 1, &, 2, &, and so on.";
+}
+function choicesHtml(q){
+  const opts = String(q.choices || "").split(",").map(s => s.trim()).filter(Boolean);
+  if (!opts.length) return "";
+  const lead = q.choicesLead ? `<span>${esc(q.choicesLead)}</span>` : "";
+  const items = opts.map(o => q.style === "check"
+    ? `<span class="ws-check"><span class="ws-box"></span>${esc(o)}</span>`
+    : `<span class="ws-chip${o.length <= 2 ? " ws-chip-num" : ""}">${esc(o)}</span>`).join("");
+  return `<div class="ws-choices${q.style === "check" ? " ws-checks" : ""}">${lead}${items}</div>`;
+}
+function questionHtml(q, num){
+  const line = `<span class="ws-line${q.blank === "below" ? " ws-line-wide" : ""}"></span>`;
+  const after = q.after ? `<span>${esc(q.after)}</span>` : "";
+  const text = `${num}. ${esc(q.text || "")}`;
+  let html = "";
+  if (q.blank === "inline") html += `<div class="ws-row"><span>${text}</span>${line}${after}</div>`;
+  else html += `<p class="ws-q">${text}</p>`;
+  if (q.blank === "below") html += `<div class="ws-row">${line}${after}</div>`;
+  html += choicesHtml(q);
+  return `<div class="ws-qblock">${html}</div>`;
+}
+function renderSheet(page){
+  const model = buildModel(page);
+  const block = renderBlock(page, model);
+  let n = 1;
+  const meterQs = page.meterQs !== false;
+  let meterHtml = "";
+  if (meterQs){
+    meterHtml = `<div class="ws-meter">
+<div class="ws-row"><span>${n++}. How many beats are in each measure?</span><span class="ws-line"></span></div>
+${page.writeMeter !== false ? `<p class="ws-q">${n++}. Write the meter signature in the dashed box.</p>` : ""}
+<div class="ws-row"><span>${n++}. Circle one:</span><span class="ws-chip ws-chip-sm">duple meter</span><span class="ws-chip ws-chip-sm">triple meter</span></div>
+</div>`;
+  }
+  const countLine = page.counts !== false || (page.countText || "").trim()
+    ? `<p class="ws-instr">${n++}. ${esc((page.countText || "").trim() || autoCountText(model))}</p>` : "";
+  const qs = (page.questions || []).filter(q => (q.text || "").trim() || (q.choices || "").trim());
+  const mapSvg = page.map && page.map.show ? renderPitchMap(page) : "";
+  const cells = qs.map(q => questionHtml(q, n++));
+  if (mapSvg){
+    const at = clamp(parseInt(page.map.after, 10) || 0, 0, cells.length);
+    const note = page.map.note ? ` <span class="ws-muted">${esc(page.map.note)}</span>` : "";
+    cells.splice(at, 0, `<div class="ws-map"><p class="ws-maptitle">${esc(page.map.title || "Pitch map")}${note}</p>${mapSvg}</div>`);
+  }
+  const lead = (page.lead || "").trim();
+  const sub = `${lead ? `<strong>${esc(lead)}</strong>` : ""}${esc(page.subtitle || "")}`;
+  const partHtml = cells.length ? `<div class="ws-part"><h2>${esc(page.partHeading || "Your part")}</h2><div class="ws-grid">${cells.join("")}</div></div>` : "";
+  const html = `<div class="ws-sheet">
+<div class="ws-head${meterQs ? "" : " ws-head-solo"}"><div class="ws-titles"><h1>${esc(page.title || "Untitled part")}</h1>${sub ? `<p class="ws-sub">${sub}</p>` : ""}</div>${meterHtml}</div>
+${countLine}
+<div class="ws-block">${block.svg}</div>
+${partHtml}
+</div>`;
+  return { html, model };
+}
+
+// ===================== RED BIRD EXAMPLE PAGES =====================
+const DRY = "Dry-erase page. Write with a marker, then wipe it clean for the next player.";
+const CHIME_QS = [
+  { text: "My chime letter:", blank: "inline", choices: "G B D, F A C, C E G", choicesLead: "It rings in (circle all):", style: "circle" },
+  { text: "How many beats does your chime ring?", choices: "2, 4, 8", style: "circle" },
+  { text: "The curved line after the whole note means:", choices: "let it ring, play it again, stop the sound", style: "circle" },
+  { text: "A new chord starts every:", choices: "1 measure, 2 measures", style: "circle" }
+];
+const BASE = { meter: "4/4", colors: true, micro: true, meterQs: true, writeMeter: true, repeat: true, counts: true, labels: true, countText: "", partHeading: "Your part", head: "normal", lead: "", map: { show: false, title: "Pitch map", note: "", labels: "", pitches: "", rhythm: "2", after: 2 } };
+function preset(o){ return JSON.parse(JSON.stringify(Object.assign({}, BASE, o))); }
+const RED_BIRD = [
+  preset({ name: "Red Bird: drums", title: "Drums", subtitle: DRY, staff: "one", rhythm: "1 1 1 1 2 R2 | R8", pitches: "",
+    questions: [
+      { text: "Check every beat with a drum sound in measure 1.", choices: "beat 1, beat 2, beat 3, beat 4", style: "check" },
+      { text: "Circle your shortest sound.", choices: "short (eighth), long (quarter), lo-ong (half)", style: "circle" },
+      { text: "In measure 2, the drums:", choices: "play, rest", style: "circle" },
+      { text: "Circle the part with the same rhythm as the drums.", choices: "rhythm sticks, jingle bells, bass xylophone, hand chimes", style: "circle" }
+    ] }),
+  preset({ name: "Red Bird: rhythm sticks", title: "Rhythm sticks", subtitle: DRY, staff: "one", rhythm: "R4 R2 2 | 2 R2 R4", pitches: "",
+    questions: [
+      { text: "Check each place you tap.", choices: "measure 1, beat 2, measure 1, beat 4, measure 2, beat 1, measure 2, beat 3", style: "check" },
+      { text: "What sits between your two taps?", choices: "a bar line, a rest", style: "circle" },
+      { text: "When you tap, who else starts a sound?", choices: "drums, jingle bells, hand chimes, nobody", style: "circle" },
+      { text: "Your taps are:", choices: "short (eighth), long (quarter)", style: "circle" }
+    ] }),
+  preset({ name: "Red Bird: jingle bells", title: "Jingle bells", subtitle: DRY, staff: "one", head: "x", rhythm: "R8 | R4 2 R2", pitches: "",
+    questions: [
+      { text: "Circle the measure where you jingle.", choices: "measure 1, measure 2", style: "circle" },
+      { text: "Circle the beat you jingle on.", choices: "1, 2, 3, 4", style: "circle" },
+      { text: "How many beats do you wait before you jingle?", blank: "below", after: "beats" },
+      { text: "The × notehead means a sound with:", choices: "no pitch, a high pitch", style: "circle" }
+    ] }),
+  preset({ name: "Red Bird: bass xylophone", title: "Bass xylophone", subtitle: DRY, staff: "bass", rhythm: "1 1 1 1 2 R2 | R8", pitches: "G3",
+    questions: [
+      { text: "Circle the part with the same rhythm as yours.", choices: "drums, rhythm sticks, jingle bells, hand chimes", style: "circle" },
+      { text: "The note you play is the chord’s:", choices: "root, top note", style: "circle" },
+      { text: "Use the root map. From F to C, your note moves:", choices: "up, down, stays the same", style: "circle" },
+      { text: "From C back to G, your note moves:", choices: "up, down, stays the same", style: "circle" }
+    ],
+    map: { show: true, title: "Root map", note: "(measure 1 of each chord)", labels: "G, F, C, G", pitches: "G3 F3 C3 G3", rhythm: "1 1 1 1 2", after: 2 } }),
+  preset({ name: "Red Bird: hand chimes, G chord", title: "Hand chimes", lead: "G chord", subtitle: ", measures 1–2 and 7–8. Wipe clean after.", staff: "treble", rhythm: "8~ | R8", pitches: "G4+B4+D5", questions: CHIME_QS }),
+  preset({ name: "Red Bird: hand chimes, F chord", title: "Hand chimes", lead: "F chord", subtitle: ", measures 3–4. Wipe clean after.", staff: "treble", rhythm: "8~ | R8", pitches: "F4+A4+C5", questions: CHIME_QS }),
+  preset({ name: "Red Bird: hand chimes, C chord", title: "Hand chimes", lead: "C chord", subtitle: ", measures 5–6. Wipe clean after.", staff: "treble", rhythm: "8~ | R8", pitches: "C4+E4+G4", questions: CHIME_QS })
+];
+
+// ===================== APP: editing, saving, printing =====================
+(function(){
+"use strict";
+const $ = id => document.getElementById(id);
+const KEY = "dry-erase-page-maker:v1";
+const BLANK_Q = { text: "", choices: "", style: "circle", choicesLead: "", blank: "none", after: "" };
+
+const newId = () => "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+function normalize(p){
+  const base = JSON.parse(JSON.stringify(BASE));
+  const out = Object.assign(base, p || {});
+  out.map = Object.assign({}, BASE.map, (p && p.map) || {});
+  out.questions = Array.isArray(out.questions) ? out.questions.map(q => Object.assign({}, BLANK_Q, q)) : [];
+  ["name", "title", "lead", "subtitle", "rhythm", "pitches", "meter", "countText", "partHeading"].forEach(k => { out[k] = out[k] == null ? "" : String(out[k]); });
+  if (!["one", "treble", "bass"].includes(out.staff)) out.staff = "one";
+  if (!["normal", "x"].includes(out.head)) out.head = "normal";
+  out.id = out.id || newId();
+  return out;
+}
+function examples(){ return RED_BIRD.map(p => normalize(Object.assign({}, JSON.parse(JSON.stringify(p)), { id: newId() }))); }
+
+// ---- saving ----
+let canStore = true;
+try { const t = "__dry_erase_test__"; localStorage.setItem(t, "1"); localStorage.removeItem(t); } catch (e) { canStore = false; }
+let state = null;
+try { state = canStore ? JSON.parse(localStorage.getItem(KEY) || "null") : null; } catch (e) { state = null; }
+if (!state || !Array.isArray(state.pages) || !state.pages.length){
+  const pages = examples();
+  state = { pages, current: pages[0].id, print: pages.map(p => p.id) };
+} else {
+  state.pages = state.pages.map(normalize);
+  if (!Array.isArray(state.print)) state.print = [];
+  if (!state.pages.some(p => p.id === state.current)) state.current = state.pages[0].id;
+}
+let saveTimer = 0;
+function persist(){
+  if (!canStore) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); }
+    catch (e) { status("Pages couldn’t be saved in this browser. Use Export pages to keep a copy."); }
+  }, 300);
+}
+if (!canStore) $("saveHelp").textContent = "This browser view can’t keep pages after you close it. Use Export pages to save a copy, and Import pages to open it again.";
+
+const cur = () => state.pages.find(p => p.id === state.current);
+let statusTimer = 0;
+function status(text){ $("status").textContent = text; clearTimeout(statusTimer); statusTimer = setTimeout(() => { $("status").textContent = ""; }, 6000); }
+
+// ---- page list ----
+function renderList(){
+  const ul = $("pageList");
+  ul.innerHTML = "";
+  state.pages.forEach(p => {
+    const li = document.createElement("li");
+    if (p.id === state.current) li.className = "current";
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.checked = state.print.includes(p.id);
+    cb.setAttribute("aria-label", `Print ${p.name || p.title || "this page"}`);
+    cb.addEventListener("change", () => {
+      state.print = state.print.filter(id => id !== p.id);
+      if (cb.checked) state.print.push(p.id);
+      persist();
+    });
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "pick"; b.textContent = p.name || p.title || "Untitled page";
+    if (p.id === state.current) b.setAttribute("aria-current", "true");
+    b.addEventListener("click", () => { state.current = p.id; persist(); renderAll(); });
+    li.append(cb, b);
+    ul.appendChild(li);
+  });
+  const i = state.pages.findIndex(p => p.id === state.current);
+  $("upPage").disabled = i <= 0;
+  $("downPage").disabled = i >= state.pages.length - 1;
+  $("delPage").disabled = state.pages.length <= 1;
+}
+
+// ---- the form ----
+function fillForm(){
+  const p = cur();
+  document.querySelectorAll("[data-k]").forEach(el => {
+    const k = el.dataset.k;
+    if (el.type === "checkbox") el.checked = p[k] !== false;
+    else el.value = p[k] == null ? "" : p[k];
+  });
+  document.querySelectorAll("[data-mk]").forEach(el => {
+    const k = el.dataset.mk;
+    if (el.type === "checkbox") el.checked = !!p.map[k];
+    else el.value = p.map[k] == null ? "" : p.map[k];
+  });
+  if (p.map.show) $("mapBox").open = true;
+  renderQuestions();
+}
+document.querySelectorAll("[data-k]").forEach(el => {
+  el.addEventListener(el.tagName === "SELECT" || el.type === "checkbox" ? "change" : "input", () => {
+    const p = cur(), k = el.dataset.k;
+    p[k] = el.type === "checkbox" ? el.checked : el.value;
+    if (k === "name" || k === "title") renderList();
+    if (k === "meterQs" || k === "writeMeter" || k === "counts" || k === "countText") renderQuestions();
+    changed();
+  });
+});
+document.querySelectorAll("[data-mk]").forEach(el => {
+  el.addEventListener(el.type === "checkbox" ? "change" : "input", () => {
+    cur().map[el.dataset.mk] = el.type === "checkbox" ? el.checked : el.value;
+    changed();
+  });
+});
+
+// ---- questions ----
+function firstQuestionNumber(p){
+  let n = 1;
+  if (p.meterQs !== false) n += p.writeMeter !== false ? 3 : 2;
+  if (p.counts !== false || (p.countText || "").trim()) n += 1;
+  return n;
+}
+const ICONS = {
+  up: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  down: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>',
+  remove: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>'
+};
+function qField(q, key, labelText, idx, type, options){
+  const wrap = document.createElement("div");
+  wrap.className = "field";
+  const id = `q${idx}_${key}`;
+  const lab = document.createElement("label");
+  lab.htmlFor = id; lab.textContent = labelText;
+  let el;
+  if (type === "select"){
+    el = document.createElement("select");
+    options.forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; el.appendChild(o); });
+  } else { el = document.createElement("input"); el.type = "text"; }
+  el.id = id; el.value = q[key] || (type === "select" ? options[0][0] : "");
+  el.addEventListener(type === "select" ? "change" : "input", () => { q[key] = el.value; changed(); });
+  wrap.append(lab, el);
+  return wrap;
+}
+function renderQuestions(){
+  const p = cur(), box = $("qList");
+  box.innerHTML = "";
+  const start = firstQuestionNumber(p);
+  p.questions.forEach((q, i) => {
+    const card = document.createElement("div");
+    card.className = "qcard";
+    const top = document.createElement("div");
+    top.className = "qtop";
+    const title = document.createElement("b");
+    title.textContent = `Question ${start + i}`;
+    const mk = (icon, lab, fn, disabled) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "iconbtn"; b.innerHTML = ICONS[icon];
+      b.setAttribute("aria-label", lab); b.title = lab; b.disabled = !!disabled;
+      b.addEventListener("click", fn);
+      return b;
+    };
+    top.append(title,
+      mk("up", `Move question ${start + i} up`, () => { p.questions.splice(i - 1, 0, p.questions.splice(i, 1)[0]); renderQuestions(); changed(); }, i === 0),
+      mk("down", `Move question ${start + i} down`, () => { p.questions.splice(i + 1, 0, p.questions.splice(i, 1)[0]); renderQuestions(); changed(); }, i === p.questions.length - 1),
+      mk("remove", `Remove question ${start + i}`, () => { p.questions.splice(i, 1); renderQuestions(); changed(); }));
+    card.appendChild(top);
+    card.appendChild(qField(q, "text", "Question", i));
+    const two = document.createElement("div"); two.className = "two";
+    two.append(qField(q, "blank", "Writing line", i, "select", [["none", "None"], ["inline", "After the question"], ["below", "On its own row"]]),
+               qField(q, "after", "Words after the line", i));
+    card.appendChild(two);
+    card.appendChild(qField(q, "choices", "Choices, separated by commas", i));
+    const two2 = document.createElement("div"); two2.className = "two";
+    two2.append(qField(q, "style", "Students mark choices by", i, "select", [["circle", "Circling"], ["check", "Checking a box"]]),
+                qField(q, "choicesLead", "Words before the choices", i));
+    card.appendChild(two2);
+    box.appendChild(card);
+  });
+  if (!p.questions.length){
+    const e = document.createElement("p"); e.className = "help"; e.textContent = "No questions yet. Add one to give students something to circle, check, or write about their part.";
+    box.appendChild(e);
+  }
+  $("countHelp").textContent = (p.counts === false && !(p.countText || "").trim()) ? "Count boxes are off, so this line is left off the page unless you type one." : "Leave blank to use the standard wording.";
+}
+$("addQ").addEventListener("click", () => {
+  const p = cur();
+  p.questions.push(Object.assign({}, BLANK_Q));
+  renderQuestions(); changed();
+  const firstOfLast = $("qList").lastElementChild && $("qList").lastElementChild.querySelector("input");
+  if (firstOfLast) firstOfLast.focus();
+});
+
+// ---- preview ----
+let renderTimer = 0;
+function changed(){ persist(); clearTimeout(renderTimer); renderTimer = setTimeout(renderPreview, 120); }
+function fitPaper(){
+  const paper = $("paper"), fit = $("fit");
+  const s = Math.min(1, fit.clientWidth / 1056);
+  paper.style.transform = `scale(${s})`;
+  fit.style.height = `${Math.ceil(816 * s)}px`;
+}
+function renderPreview(){
+  const p = cur();
+  let res;
+  try { res = renderSheet(p); }
+  catch (e) { $("warnings").innerHTML = "<p>Something in this page couldn’t be drawn. Check the rhythm and pitches for typing mistakes.</p>"; return; }
+  $("paper").innerHTML = res.html;
+  fitPaper();
+  const w = res.model.warnings.slice();
+  const sheet = $("paper").querySelector(".ws-sheet");
+  if (sheet && sheet.scrollHeight > sheet.clientHeight + 1) w.push("The page runs past the bottom edge. Shorten or remove a question, turn off the pitch map, or use fewer measures.");
+  $("warnings").innerHTML = w.map(t => `<p>${esc(t)}</p>`).join("");
+}
+window.addEventListener("resize", fitPaper);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(renderPreview);
+
+function renderAll(){ renderList(); fillForm(); renderPreview(); }
+
+// ---- page actions ----
+$("newPage").addEventListener("click", () => {
+  const p = normalize({ name: "New page", title: "New part", subtitle: DRY, staff: "one", rhythm: "2 2 2 2 | 2 2 4", pitches: "", questions: [Object.assign({}, BLANK_Q, { text: "Circle your longest sound.", choices: "short (eighth), long (quarter), lo-ong (half)" })] });
+  const i = state.pages.findIndex(x => x.id === state.current);
+  state.pages.splice(i + 1, 0, p); state.current = p.id; state.print.push(p.id);
+  persist(); renderAll(); $("f_name").focus(); $("f_name").select();
+});
+$("dupPage").addEventListener("click", () => {
+  const src = cur(), p = normalize(Object.assign(JSON.parse(JSON.stringify(src)), { id: newId(), name: (src.name || src.title || "Page") + " (copy)" }));
+  const i = state.pages.findIndex(x => x.id === state.current);
+  state.pages.splice(i + 1, 0, p); state.current = p.id; state.print.push(p.id);
+  persist(); renderAll(); status(`Made a copy of ${src.name || src.title}.`);
+});
+function move(d){
+  const i = state.pages.findIndex(x => x.id === state.current), j = i + d;
+  if (j < 0 || j >= state.pages.length) return;
+  state.pages.splice(j, 0, state.pages.splice(i, 1)[0]);
+  persist(); renderList();
+}
+$("upPage").addEventListener("click", () => move(-1));
+$("downPage").addEventListener("click", () => move(1));
+let delArmed = 0;
+$("delPage").addEventListener("click", () => {
+  const b = $("delPage");
+  if (state.pages.length <= 1) return;
+  if (!delArmed){
+    b.textContent = "Click again to delete";
+    delArmed = setTimeout(() => { delArmed = 0; b.textContent = "Delete"; }, 4000);
+    return;
+  }
+  clearTimeout(delArmed); delArmed = 0; b.textContent = "Delete";
+  const i = state.pages.findIndex(x => x.id === state.current), gone = state.pages[i];
+  state.pages.splice(i, 1);
+  state.print = state.print.filter(id => id !== gone.id);
+  state.current = state.pages[Math.min(i, state.pages.length - 1)].id;
+  persist(); renderAll(); status(`Deleted ${gone.name || gone.title || "the page"}.`);
+});
+
+// ---- printing ----
+function printPages(list){
+  if (!list.length){ status("Check at least one page in the list to print."); return; }
+  $("printRoot").innerHTML = list.map(p => renderSheet(p).html).join("");
+  const go = () => window.print();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(go); else go();
+}
+$("printOne").addEventListener("click", () => printPages([cur()]));
+$("printChecked").addEventListener("click", () => printPages(state.pages.filter(p => state.print.includes(p.id))));
+window.addEventListener("beforeprint", () => { if (!$("printRoot").innerHTML.trim()) $("printRoot").innerHTML = renderSheet(cur()).html; });
+window.addEventListener("afterprint", () => { $("printRoot").innerHTML = ""; });
+
+// ---- export, import, examples ----
+function download(filename, text){
+  const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+$("exportBtn").addEventListener("click", () => {
+  const pages = state.pages.map(p => { const c = JSON.parse(JSON.stringify(p)); delete c.id; return c; });
+  download("dry-erase-pages.json", JSON.stringify({ app: "dry-erase-page-maker", version: 1, exported: new Date().toISOString(), pages }, null, 2));
+  status(`Exported ${pages.length} ${pages.length === 1 ? "page" : "pages"} to dry-erase-pages.json.`);
+});
+$("importBtn").addEventListener("click", () => $("importFile").click());
+$("importFile").addEventListener("change", async e => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  let list = null;
+  try {
+    const data = JSON.parse(await file.text());
+    list = Array.isArray(data) ? data : (data && Array.isArray(data.pages) ? data.pages : null);
+  } catch (err) { list = null; }
+  if (!list){ status("That file isn’t a page export from this page maker."); return; }
+  const added = list.filter(p => p && typeof p === "object").map(p => normalize(Object.assign({}, p, { id: newId() })));
+  if (!added.length){ status("That file had no pages in it."); return; }
+  state.pages.push(...added);
+  state.current = added[0].id;
+  persist(); renderAll();
+  status(`Imported ${added.length} ${added.length === 1 ? "page" : "pages"}.`);
+});
+$("examplesBtn").addEventListener("click", () => {
+  const added = examples();
+  state.pages.push(...added);
+  state.current = added[0].id;
+  persist(); renderAll();
+  status("Added the seven Red Bird pages to the end of the list.");
+});
+
+renderAll();
+})();
+
+</script>
+</body>
+</html>
