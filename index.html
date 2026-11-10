@@ -199,8 +199,10 @@ details.more summary{cursor:pointer;font-weight:700;min-height:32px;display:flex
     <div class="checks">
       <label><input type="checkbox" data-k="meterQs"> Meter questions in the corner</label>
       <label><input type="checkbox" data-k="writeMeter"> Students write the meter signature in a dashed box</label>
-      <label><input type="checkbox" data-k="counts"> Count boxes under each sound</label>
+      <label><input type="checkbox" data-k="counts"> A place to write the count under each sound</label>
     </div>
+    <div class="field"><label for="f_countStyle">Where students write the counts</label>
+      <select id="f_countStyle" data-k="countStyle"><option value="dashed">Dashed boxes, like the meter signature box</option><option value="lines">Lines</option></select></div>
     <div class="field"><label for="f_countText">Counting direction</label><input type="text" id="f_countText" data-k="countText">
       <p class="help" id="countHelp">Leave blank to use the standard wording.</p></div>
 
@@ -481,18 +483,30 @@ function renderBlock(page, model){
   y = yBarsBottom + 14;
   if (page.counts !== false){
     const hC = 42;
+    // a place to write each count: a dashed box like the meter signature box, or a line
+    const countSpace = (x, y0, w, h, ring) => {
+      if (page.countStyle === "lines"){
+        const ly = r2(y0 + h - 2);
+        return ring
+          ? `<line x1="${r2(x + 2)}" y1="${ly}" x2="${r2(x + w - 2)}" y2="${ly}" stroke="#4E8A68" stroke-width="2.5" stroke-dasharray="6 4"/>`
+          : `<line x1="${r2(x + 2)}" y1="${ly}" x2="${r2(x + w - 2)}" y2="${ly}" stroke="#3F3F3F" stroke-width="2.5"/>`;
+      }
+      return ring
+        ? rect(x, y0, w, h, "#E9F2EC", ` rx="6" stroke="#7FA38D" stroke-width="2" stroke-dasharray="6 4"`)
+        : rect(x, y0, w, h, "#FFFFFF", ` rx="6" stroke="${ACCENT}" stroke-width="2.2" stroke-dasharray="7 5"`);
+    };
     const soundStarts = model.evs.filter(e => !e.rest).map(e => e.t).concat([total]);
     model.evs.forEach(e => {
       if (e.rest) return;
       const nextStart = soundStarts.find(t => t > e.t + EPS);
       const bw = Math.min(Q + 4, (nextStart - e.t) * S - 4);
-      parts.push(rect(slot(e.t) - 2, y, bw, hC, "#FFFFFF", ` rx="6" stroke="#6F7672" stroke-width="1.6"`));
+      parts.push(countSpace(slot(e.t) - 2, y, bw, hC, false));
       if (e.ring){
         for (let b = Math.ceil((e.t + EPS) / meter.beat) * meter.beat; b < e.next - EPS; b += meter.beat)
-          parts.push(rect(slot(b) - 2, y, Q + 4, hC, "#E9F2EC", ` rx="6" stroke="#7FA38D" stroke-width="1.6" stroke-dasharray="5 3"`));
+          parts.push(countSpace(slot(b) - 2, y, Q + 4, hC, true));
       }
     });
-    if (page.labels !== false) parts.push(label("Counts", y + hC / 2));
+    if (page.labels !== false) parts.push(label("Counts", page.countStyle === "lines" ? y + hC - 10 : y + hC / 2));
     y += hC + 12;
   }
 
@@ -509,7 +523,7 @@ function renderBlock(page, model){
 function describeBlock(page, model){
   const n = model.measures;
   const sounds = model.evs.filter(e => !e.rest).length;
-  return `${n} ${n === 1 ? "measure" : "measures"} of the ${page.title || "part"}: icons over beat bars, ${page.counts === false ? "" : "count boxes, "}and the same part on a ${page.staff === "treble" ? "treble clef staff" : page.staff === "bass" ? "bass clef staff" : "one-line staff"}, with ${sounds} ${sounds === 1 ? "sound" : "sounds"}.`;
+  return `${n} ${n === 1 ? "measure" : "measures"} of the ${page.title || "part"}: icons over beat bars, ${page.counts === false ? "" : "places to write the counts, "}and the same part on a ${page.staff === "treble" ? "treble clef staff" : page.staff === "bass" ? "bass clef staff" : "one-line staff"}, with ${sounds} ${sounds === 1 ? "sound" : "sounds"}.`;
 }
 
 function engraveStaff(page, model, L){
@@ -767,8 +781,9 @@ function renderPitchMap(page){
 }
 
 // ---- the whole printable page ----
-function autoCountText(model){
-  return model.evs.some(e => e.ring) ? "Write your strike count in the white box, then count the ring in the green boxes." : "Under each sound, write its count: 1, &, 2, &, and so on.";
+function autoCountText(model, page){
+  if (!model.evs.some(e => e.ring)) return page.countStyle === "lines" ? "On the line under each sound, write its count: 1, &, 2, &, and so on." : "Under each sound, write its count: 1, &, 2, &, and so on.";
+  return page.countStyle === "lines" ? "Write your strike count on the solid line, then count the ring on the green dashed lines." : "Write your strike count in the white box, then count the ring in the green boxes.";
 }
 function choicesHtml(q){
   const opts = String(q.choices || "").split(",").map(s => s.trim()).filter(Boolean);
@@ -804,7 +819,7 @@ ${page.writeMeter !== false ? `<p class="ws-q">${n++}. Write the meter signature
 </div>`;
   }
   const countLine = page.counts !== false || (page.countText || "").trim()
-    ? `<p class="ws-instr">${n++}. ${esc((page.countText || "").trim() || autoCountText(model))}</p>` : "";
+    ? `<p class="ws-instr">${n++}. ${esc((page.countText || "").trim() || autoCountText(model, page))}</p>` : "";
   const qs = (page.questions || []).filter(q => (q.text || "").trim() || (q.choices || "").trim());
   const mapSvg = page.map && page.map.show ? renderPitchMap(page) : "";
   const cells = qs.map(q => questionHtml(q, n++));
@@ -833,7 +848,7 @@ const CHIME_QS = [
   { text: "The curved line after the whole note means:", choices: "let it ring, play it again, stop the sound", style: "circle" },
   { text: "A new chord starts every:", choices: "1 measure, 2 measures", style: "circle" }
 ];
-const BASE = { meter: "4/4", colors: true, micro: true, meterQs: true, writeMeter: true, repeat: true, counts: true, labels: true, countText: "", partHeading: "Your part", head: "normal", lead: "", map: { show: false, title: "Pitch map", note: "", labels: "", pitches: "", rhythm: "2", after: 2 } };
+const BASE = { meter: "4/4", colors: true, micro: true, meterQs: true, writeMeter: true, repeat: true, counts: true, countStyle: "dashed", labels: true, countText: "", partHeading: "Your part", head: "normal", lead: "", map: { show: false, title: "Pitch map", note: "", labels: "", pitches: "", rhythm: "2", after: 2 } };
 function preset(o){ return JSON.parse(JSON.stringify(Object.assign({}, BASE, o))); }
 const RED_BIRD = [
   preset({ name: "Red Bird: drums", title: "Drums", subtitle: DRY, staff: "one", rhythm: "1 1 1 1 2 R2 | R8", pitches: "",
@@ -886,6 +901,7 @@ function normalize(p){
   ["name", "title", "lead", "subtitle", "rhythm", "pitches", "meter", "countText", "partHeading"].forEach(k => { out[k] = out[k] == null ? "" : String(out[k]); });
   if (!["one", "treble", "bass"].includes(out.staff)) out.staff = "one";
   if (!["normal", "x"].includes(out.head)) out.head = "normal";
+  if (!["dashed", "lines"].includes(out.countStyle)) out.countStyle = "dashed";
   out.id = out.id || newId();
   return out;
 }
@@ -1046,7 +1062,7 @@ function renderQuestions(){
     const e = document.createElement("p"); e.className = "help"; e.textContent = "No questions yet. Add one to give students something to circle, check, or write about their part.";
     box.appendChild(e);
   }
-  $("countHelp").textContent = (p.counts === false && !(p.countText || "").trim()) ? "Count boxes are off, so this line is left off the page unless you type one." : "Leave blank to use the standard wording.";
+  $("countHelp").textContent = (p.counts === false && !(p.countText || "").trim()) ? "Count spaces are off, so this line is left off the page unless you type one." : "Leave blank to use the standard wording.";
 }
 $("addQ").addEventListener("click", () => {
   const p = cur();
